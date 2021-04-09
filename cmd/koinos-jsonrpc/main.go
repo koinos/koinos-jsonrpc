@@ -54,6 +54,8 @@ func main() {
 		yamlConfigPath = filepath.Join(*baseDir, "config.yaml")
 	}
 
+	log.Println(yamlConfigPath)
+
 	yamlConfig := yamlConfig{}
 	if _, err := os.Stat(yamlConfigPath); err == nil {
 		data, err := ioutil.ReadFile(yamlConfigPath)
@@ -84,7 +86,7 @@ func main() {
 
 	ipAddr, err := m.ValueForProtocol(ma.P_IP4)
 	if err != nil {
-		panic("Expected ip4 address")
+		ipAddr = ""
 	}
 
 	tcpPort, err := m.ValueForProtocol((ma.P_TCP))
