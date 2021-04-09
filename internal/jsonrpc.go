@@ -12,34 +12,36 @@ import (
 	koinosmq "github.com/koinos/koinos-mq-golang"
 )
 
-// The JSONRPCGenericRequest allows for parsing incoming JSON RPC
+// The GenericRequest allows for parsing incoming JSON RPC
 // while deferring the parsing of the params
-type JSONRPCGenericRequest struct {
+type GenericRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	ID      json.RawMessage `json:"id"`
 	Params  json.RawMessage `json:"params"`
 }
 
-type JSONRPCWrappedResponse struct {
+// KoinosRPCResponse is a Koinos RPC response object
+type KoinosRPCResponse struct {
 	Type  json.RawMessage `json:"type"`
 	Value json.RawMessage `json:"value"`
 }
 
+// KoinosRPCError is a Koinos RPC response error
 type KoinosRPCError struct {
 	ErrorText string `json:"error_text"`
 	ErrorData string `json:"error_data"`
 }
 
-// JSONRPCError represents a JSON RPC error
-type JSONRPCError struct {
+// RPCError represents a JSON RPC error
+type RPCError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// JSONRPCResponse represents a JSON RPC response
-type JSONRPCResponse struct {
+// RPCResponse represents a JSON RPC response
+type RPCResponse struct {
 	JSONRPC string      `json:"jsonrpc"`
 	Result  interface{} `json:"result,omitempty"`
 	Error   interface{} `json:"error,omitempty"`
@@ -99,6 +101,7 @@ const (
 	// MethodSections defines the number of sections in the JSON RPC method
 	MethodSections = 2
 
+	// RPCTimeoutSeconds defines how long to wait for a Koinos RPC response
 	RPCTimeoutSeconds = 5
 )
 
@@ -114,7 +117,7 @@ func errorWithID(e error) bool {
 	return true
 }
 
-func translateRequest(j *JSONRPCGenericRequest) ([]byte, error) {
+func translateRequest(j *GenericRequest) ([]byte, error) {
 	methodData := strings.SplitN(j.Method, MethodSeparator, MethodSections)
 	if len(methodData) != MethodSections {
 		return nil, ErrMalformedMethod
@@ -125,8 +128,8 @@ func translateRequest(j *JSONRPCGenericRequest) ([]byte, error) {
 	return requestBytes, nil
 }
 
-func parseRequest(request []byte) (*JSONRPCGenericRequest, error) {
-	var genericRequest JSONRPCGenericRequest
+func parseRequest(request []byte) (*GenericRequest, error) {
+	var genericRequest GenericRequest
 	err := json.Unmarshal(request, &genericRequest)
 	if err != nil {
 		return nil, err
@@ -134,7 +137,7 @@ func parseRequest(request []byte) (*JSONRPCGenericRequest, error) {
 	return &genericRequest, nil
 }
 
-func validateRequest(request *JSONRPCGenericRequest) error {
+func validateRequest(request *GenericRequest) error {
 	// Check ID first, an invalid ID must return a Null ID in the response!
 
 	// The client MUST provide an ID with a request
@@ -169,12 +172,12 @@ func validateRequest(request *JSONRPCGenericRequest) error {
 	return nil
 }
 
-func translateResponse(w *JSONRPCWrappedResponse) JSONRPCResponse {
-	var response = JSONRPCResponse{}
+func translateResponse(w *KoinosRPCResponse) RPCResponse {
+	var response = RPCResponse{}
 
 	isError, err := isErrorResponse(w)
 	if err != nil {
-		response.Error = JSONRPCError{
+		response.Error = RPCError{
 			Code:    JSONRPCInternalError,
 			Message: fmt.Sprintf("%v", err),
 		}
@@ -186,14 +189,14 @@ func translateResponse(w *JSONRPCWrappedResponse) JSONRPCResponse {
 		err := json.Unmarshal(w.Value, &rpcError)
 
 		if err != nil {
-			response.Error = JSONRPCError{
+			response.Error = RPCError{
 				Code:    JSONRPCInternalError,
 				Message: fmt.Sprintf("%v", err),
 			}
 			return response
 		}
 
-		response.Error = JSONRPCError{
+		response.Error = RPCError{
 			Code:    JSONRPCInternalError,
 			Message: rpcError.ErrorText,
 			Data:    rpcError.ErrorData,
@@ -205,7 +208,7 @@ func translateResponse(w *JSONRPCWrappedResponse) JSONRPCResponse {
 	return response
 }
 
-func isErrorResponse(j *JSONRPCWrappedResponse) (bool, error) {
+func isErrorResponse(j *KoinosRPCResponse) (bool, error) {
 	typeBytes, err := json.Marshal(j.Type)
 	if err != nil {
 		return false, err
@@ -219,11 +222,11 @@ func isErrorResponse(j *JSONRPCWrappedResponse) (bool, error) {
 func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, bool) {
 	genericRequest, err := parseRequest(reqBytes)
 	if err != nil {
-		jsonError, e := json.Marshal(JSONRPCResponse{
+		jsonError, e := json.Marshal(RPCResponse{
 			JSONRPC: "2.0",
 			// If there was an error in detecting the id in the Request object (e.g. Parse error/Invalid Request), it MUST be Null.
 			ID: nil,
-			Error: &JSONRPCError{
+			Error: &RPCError{
 				Code:    JSONRPCParseError,
 				Message: "Unable to parse request",
 				Data:    err.Error(),
@@ -243,10 +246,10 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 		if errorWithID(err) {
 			id = nil
 		}
-		jsonError, e := json.Marshal(JSONRPCResponse{
+		jsonError, e := json.Marshal(RPCResponse{
 			JSONRPC: "2.0",
 			ID:      id,
-			Error: &JSONRPCError{
+			Error: &RPCError{
 				Code:    JSONRPCInvalidReq,
 				Message: "Invalid request",
 				Data:    err.Error(),
@@ -261,10 +264,10 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 
 	request, err := translateRequest(genericRequest)
 	if err != nil {
-		jsonError, e := json.Marshal(JSONRPCResponse{
+		jsonError, e := json.Marshal(RPCResponse{
 			JSONRPC: "2.0",
 			ID:      genericRequest.ID,
-			Error: &JSONRPCError{
+			Error: &RPCError{
 				Code:    JSONRPCMethodNotFound,
 				Message: "Unable to translate request",
 				Data:    err.Error(),
@@ -285,10 +288,10 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 	log.Print(string(responseBytes))
 
 	if err != nil {
-		jsonError, e := json.Marshal(JSONRPCResponse{
+		jsonError, e := json.Marshal(RPCResponse{
 			JSONRPC: "2.0",
 			ID:      genericRequest.ID,
-			Error: &JSONRPCError{
+			Error: &RPCError{
 				Code:    JSONRPCInternalError,
 				Message: "An inernal server error has occurred",
 				Data:    err.Error(),
@@ -301,7 +304,7 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 		return jsonError, true
 	}
 
-	wrappedResponse := JSONRPCWrappedResponse{}
+	wrappedResponse := KoinosRPCResponse{}
 	err = json.Unmarshal(responseBytes, &wrappedResponse)
 
 	response := translateResponse(&wrappedResponse)
@@ -310,10 +313,10 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 
 	jsonResponse, err := json.Marshal(&response)
 	if err != nil {
-		jsonError, e := json.Marshal(JSONRPCResponse{
+		jsonError, e := json.Marshal(RPCResponse{
 			JSONRPC: "2.0",
 			ID:      genericRequest.ID,
-			Error: &JSONRPCError{
+			Error: &RPCError{
 				Code:    JSONRPCInternalError,
 				Message: "An inernal server error has occurred",
 				Data:    err.Error(),
