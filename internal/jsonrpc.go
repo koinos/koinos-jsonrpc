@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
+	log "github.com/koinos/koinos-log-golang"
 	koinosmq "github.com/koinos/koinos-mq-golang"
 )
 
@@ -233,7 +233,7 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 			},
 		})
 		if e != nil {
-			log.Println("An unexpected error has occurred: ", e.Error())
+			log.Warnf("An unexpected error has occurred: %v", e.Error())
 			return make([]byte, 0), false
 		}
 		return jsonError, true
@@ -256,7 +256,7 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 			},
 		})
 		if e != nil {
-			log.Println("An unexpected error has occurred: ", e.Error())
+			log.Warnf("An unexpected error has occurred: %v", e.Error())
 			return make([]byte, 0), false
 		}
 		return jsonError, true
@@ -274,7 +274,7 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 			},
 		})
 		if e != nil {
-			log.Println("An unexpected error has occurred: ", e.Error())
+			log.Warnf("An unexpected error has occurred: %v", e.Error())
 			return make([]byte, 0), false
 		}
 		return jsonError, true
@@ -284,8 +284,6 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeoutSeconds*time.Second)
 	defer cancel()
 	responseBytes, err := client.RPCContext(ctx, "application/json", service, request)
-
-	log.Print(string(responseBytes))
 
 	if err != nil {
 		jsonError, e := json.Marshal(RPCResponse{
@@ -298,7 +296,7 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 			},
 		})
 		if e != nil {
-			log.Println("An unexpected error has occurred: ", e.Error())
+			log.Warnf("An unexpected error has occurred: %v", e.Error())
 			return make([]byte, 0), false
 		}
 		return jsonError, true
@@ -323,7 +321,7 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 			},
 		})
 		if e != nil {
-			log.Println("An unexpected error has occurred: ", e.Error())
+			log.Warnf("An unexpected error has occurred: %v", e.Error())
 			return make([]byte, 0), false
 		}
 		return jsonError, true
