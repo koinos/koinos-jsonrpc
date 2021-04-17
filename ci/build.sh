@@ -8,5 +8,10 @@ if [[ -z $BUILD_DOCKER ]]; then
    mkdir -p build
    go build -o build/koinos_jsonrpc cmd/koinos-jsonrpc/main.go
 else
-   docker build . -t koinos-jsonrpc
+   export TAG="$TRAVIS_BRANCH"
+   if [ "$TAG" = "master" ]; then
+      export TAG="latest"
+   fi
+
+   docker build . -t koinos/koinos-jsonrpc:$TAG
 fi
