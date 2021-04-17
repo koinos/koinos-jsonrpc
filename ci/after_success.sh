@@ -9,6 +9,5 @@ if ! [[ -z $BUILD_DOCKER ]]; then
    fi
 
    echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-   docker tag koinos-jsonrpc koinos/koinos-jsonrpc:$TAG
    docker push koinos/koinos-jsonrpc:$TAG
 fi
