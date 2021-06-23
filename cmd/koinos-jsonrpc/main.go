@@ -107,7 +107,7 @@ func main() {
 
 	http.HandleFunc(*endpoint, httpHandler)
 	go http.ListenAndServe(ipAddr+":"+tcpPort, nil)
-	log.Infof("Listensing on %v:%v%v", ipAddr, tcpPort, *endpoint)
+	log.Infof("Listening on %v:%v%v", ipAddr, tcpPort, *endpoint)
 
 	// Wait for a SIGINT or SIGTERM signal
 	ch := make(chan os.Signal, 1)
