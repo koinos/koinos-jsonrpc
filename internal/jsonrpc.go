@@ -316,7 +316,7 @@ func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, boo
 			ID:      genericRequest.ID,
 			Error: &RPCError{
 				Code:    JSONRPCInternalError,
-				Message: "An inernal server error has occurred",
+				Message: "An internal server error has occurred",
 				Data:    err.Error(),
 			},
 		})
