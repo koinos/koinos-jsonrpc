@@ -10,9 +10,4 @@ if ! [[ -z $BUILD_DOCKER ]]; then
 
    echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
    docker push koinos/koinos-jsonrpc:$TAG
-
-   if [ "$TRAVIS_TAG" != "" ]; then
-      docker tag koinos/koinos-chain:$TAG koinos/koinos-chain:$TRAVIS_TAG
-      docker push koinos/koinos-chain:$TRAVIS_TAG
-   fi
 fi
