@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"syscall"
 
 	jsonrpc "github.com/koinos/koinos-jsonrpc/internal"
@@ -15,23 +16,30 @@ import (
 	util "github.com/koinos/koinos-util-golang"
 	ma "github.com/multiformats/go-multiaddr"
 	flag "github.com/spf13/pflag"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 const (
-	basedirOption    = "basedir"
-	amqpOption       = "amqp"
-	listenOption     = "listen"
-	endpointOption   = "endpoint"
-	logLevelOption   = "log-level"
-	instanceIDOption = "instance-id"
+	basedirOption        = "basedir"
+	amqpOption           = "amqp"
+	listenOption         = "listen"
+	endpointOption       = "endpoint"
+	logLevelOption       = "log-level"
+	instanceIDOption     = "instance-id"
+	descriptorsDirOption = "descriptors"
 )
 
 const (
-	basedirDefault  = ".koinos"
-	amqpDefault     = "amqp://guest:guest@localhost:5672/"
-	listenDefault   = "/ip4/127.0.0.1/tcp/8080"
-	endpointDefault = "/"
-	logLevelDefault = "info"
+	basedirDefault        = ".koinos"
+	amqpDefault           = "amqp://guest:guest@localhost:5672/"
+	listenDefault         = "/ip4/127.0.0.1/tcp/8080"
+	endpointDefault       = "/"
+	logLevelDefault       = "info"
+	descriptorsDirDefault = "descriptors"
 )
 
 const (
@@ -46,6 +54,7 @@ func main() {
 	endpoint := flag.StringP(endpointOption, "e", "", "Http listen endpoint")
 	logLevel := flag.StringP(logLevelOption, "v", "", "The log filtering level (debug, info, warn, error)")
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
+	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
 
 	flag.Parse()
 
@@ -58,6 +67,7 @@ func main() {
 	*endpoint = util.GetStringOption(endpointOption, endpointDefault, *endpoint, yamlConfig.JSONRPC)
 	*logLevel = util.GetStringOption(logLevelOption, logLevelDefault, *logLevel, yamlConfig.JSONRPC, yamlConfig.Global)
 	*instanceID = util.GetStringOption(instanceIDOption, util.GenerateBase58ID(5), *instanceID, yamlConfig.JSONRPC, yamlConfig.Global)
+	*descriptorsDir = util.GetStringOption(descriptorsDirOption, descriptorsDirDefault, *descriptorsDir, yamlConfig.JSONRPC, yamlConfig.Global)
 
 	appID := fmt.Sprintf("%s.%s", appName, *instanceID)
 
@@ -86,6 +96,65 @@ func main() {
 		panic("Expected tcp port")
 	}
 
+	jsonrpcHandler := jsonrpc.NewJSONRPCHandler(client)
+
+	if !filepath.IsAbs(*descriptorsDir) {
+		*descriptorsDir = path.Join(util.GetAppDir(*baseDir, appName), *descriptorsDir)
+	}
+
+	util.EnsureDir(*descriptorsDir)
+
+	// For each file in descriptorsDir, try to parse as a FileDescriptor or FileDescriptorSet
+	files, err := ioutil.ReadDir(*descriptorsDir)
+	if err != nil {
+		log.Errorf("Could not read directory %s: %s", *descriptorsDir, err.Error())
+		os.Exit(1)
+	}
+
+	var protoFileOpts protodesc.FileOptions
+	var protoFiles protoregistry.Files
+
+	for _, f := range files {
+		// If it is a file
+		if !f.IsDir() {
+			fileBytes, err := ioutil.ReadFile(path.Join(*descriptorsDir, f.Name()))
+			if err != nil {
+				log.Errorf("Could not read file %s: %s", f.Name(), err.Error())
+				continue
+			}
+
+			var fds descriptorpb.FileDescriptorSet
+			err = proto.Unmarshal(fileBytes, &fds)
+			if err != nil {
+				var fdProto descriptorpb.FileDescriptorProto
+				err2 := proto.Unmarshal(fileBytes, &fdProto)
+				if err2 != nil {
+					log.Errorf("Could not parse file %s: (%s, %s)", f.Name(), err.Error(), err2.Error())
+					continue
+				}
+
+				fd, err := protoFileOpts.New(&fdProto, &protoFiles)
+				if err != nil {
+					log.Errorf("Could not convert file descriptor for %s: %s", f.Name(), err.Error())
+					continue
+				}
+
+				jsonrpcHandler.RegisterService(fd)
+			} else {
+				files, err := protoFileOpts.NewFiles(&fds)
+				if err != nil {
+					log.Errorf("Could not convert file descriptor set for %s: %s", f.Name(), err.Error())
+					continue
+				}
+
+				files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+					jsonrpcHandler.RegisterService(fd)
+					return true
+				})
+			}
+		}
+	}
+
 	httpHandler := func(w http.ResponseWriter, req *http.Request) {
 		body, err := ioutil.ReadAll(req.Body)
 		if err != nil {
@@ -94,7 +163,7 @@ func main() {
 		}
 
 		log.Debug(string(body))
-		response, ok := jsonrpc.HandleJSONRPCRequest(body, client)
+		response, ok := jsonrpcHandler.HandleRequest(body)
 		if !ok {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

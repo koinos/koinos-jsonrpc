@@ -17,6 +17,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
+github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
+github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/ipfs/go-cid v0.0.7 h1:ysQJVJA3fNDF1qigJbsSQOdjhVLsOEoPdh0+R97k3jY=
@@ -30,6 +32,8 @@ github.com/koinos/koinos-log-golang v0.0.0-20210621202301-3310a8e5866b h1:pZ9L1E
 github.com/koinos/koinos-log-golang v0.0.0-20210621202301-3310a8e5866b/go.mod h1:/dzAVdA+woySENUYwls8RT+5i87Rm4qoMZ4ctEQI8k0=
 github.com/koinos/koinos-mq-golang v0.0.0-20210424202816-d2bd4d1894d1 h1:Zg6jmGes+odGMAdAQaelsHllKNZCJSzjQwHSGlVQNPc=
 github.com/koinos/koinos-mq-golang v0.0.0-20210424202816-d2bd4d1894d1/go.mod h1:EFk+fuUL5ezbaWsGJ2U0KlzbgkflwRv96az8dEVe16I=
+github.com/koinos/koinos-proto-golang v0.0.0-20210914170258-3625b3f80c90 h1:eLZtN7XOY27QonuWC7hHy4Kg3OVy+GPl51ILSXxcCh8=
+github.com/koinos/koinos-proto-golang v0.0.0-20210914170258-3625b3f80c90/go.mod h1:X0JDk9LJhh3zXCTtKc0OLL9zUGbVk1HIGPKi/WLpFuE=
 github.com/koinos/koinos-types-golang v0.0.0-20210526205640-7768b9840fe1/go.mod h1:inTj1woeLBXfRICUkKYjW7pCsrVJCBBJvMcOzx7+PSs=
 github.com/koinos/koinos-types-golang v0.0.0-20210628221636-0b4f1b4a2ccf h1:daOxlccXpidZ7QY1I8WQ6ENCnkZtU5/BOrlVCk4r8X0=
 github.com/koinos/koinos-types-golang v0.0.0-20210628221636-0b4f1b4a2ccf/go.mod h1:inTj1woeLBXfRICUkKYjW7pCsrVJCBBJvMcOzx7+PSs=
@@ -118,6 +122,10 @@ golang.org/x/tools v0.0.0-20190621195816-6e04913cbbac/go.mod h1:/rFqwRUd4F7ZHNgw
 golang.org/x/tools v0.0.0-20191029041327-9cc4af7d6b2c/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20191029190741-b9c20aec41a5/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
+google.golang.org/protobuf v1.27.1 h1:SnqbnDw1V7RiZcXPx5MEeqPv2s79L9i7BJUlG/+RurQ=
+google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 h1:qIbj1fsPNlZgppZ+VLlY7N33q108Sa+fhmuc+sWQYwY=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=

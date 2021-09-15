@@ -10,27 +10,19 @@ import (
 
 	log "github.com/koinos/koinos-log-golang"
 	koinosmq "github.com/koinos/koinos-mq-golang"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// The GenericRequest allows for parsing incoming JSON RPC
+// The RPCRequest allows for parsing incoming JSON RPC
 // while deferring the parsing of the params
-type GenericRequest struct {
+type RPCRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	ID      json.RawMessage `json:"id"`
 	Params  json.RawMessage `json:"params"`
-}
-
-// KoinosRPCResponse is a Koinos RPC response object
-type KoinosRPCResponse struct {
-	Type  json.RawMessage `json:"type"`
-	Value json.RawMessage `json:"value"`
-}
-
-// KoinosRPCError is a Koinos RPC response error
-type KoinosRPCError struct {
-	ErrorText string `json:"error_text"`
-	ErrorData string `json:"error_data"`
 }
 
 // RPCError represents a JSON RPC error
@@ -46,6 +38,11 @@ type RPCResponse struct {
 	Result  interface{} `json:"result,omitempty"`
 	Error   interface{} `json:"error,omitempty"`
 	ID      interface{} `json:"id"`
+}
+
+type JSONRPCHandler struct {
+	mqClient           *koinosmq.Client
+	serviceDescriptors map[string]protoreflect.FileDescriptor
 }
 
 const (
@@ -74,6 +71,12 @@ var (
 
 	// ErrInvalidService indicates the correct ServiceName was not supplied
 	ErrInvalidService = errors.New("Invalid service name provided")
+
+	// ErrUnknownMethod indicates the method is not known
+	ErrUnknownMethod = errors.New("Unknown method")
+
+	// ErrInvalidParams indicates the parameters could not be parsed
+	ErrInvalidParams = errors.New("Parameters could not be parsed")
 
 	// ErrInvalidJSONRPCVersion indicates an improper JSON RPC version was specified
 	ErrInvalidJSONRPCVersion = errors.New("Invalid or missing JSON RPC version was specified")
@@ -117,27 +120,73 @@ func errorWithID(e error) bool {
 	return true
 }
 
-func translateRequest(j *GenericRequest) ([]byte, error) {
+func parseMethod(j *RPCRequest) (string, string, string, error) {
 	methodData := strings.SplitN(j.Method, MethodSeparator, MethodSections)
-	if len(methodData) != MethodSections {
-		return nil, ErrMalformedMethod
+	if len(methodData) < MethodSections {
+		return "", "", "", ErrMalformedMethod
 	}
+	service := methodData[len(methodData)-2]
+	qualified_service := strings.Join(methodData[:len(methodData)-1], MethodSeparator)
+	method := methodData[len(methodData)-1]
 
-	requestBytes := []byte(`{"type":"koinos::rpc::` + methodData[0] + `::` + methodData[1] + `_request","value":` + string(j.Params) + `}`)
-
-	return requestBytes, nil
+	return service, qualified_service, method, nil
 }
 
-func parseRequest(request []byte) (*GenericRequest, error) {
-	var genericRequest GenericRequest
-	err := json.Unmarshal(request, &genericRequest)
+func translateRequest(j *RPCRequest, service string, qualified_service string, method string, services map[string]protoreflect.FileDescriptor) ([]byte, error) {
+	// Attempt to find service name as a FileDescripor
+	// If I cannot find it, prefix with 'koinos.rpc.' and attempt again
+	// (koinos.rpc.mempool and mempool will both be valid serives names)
+	filed, exists := services[qualified_service]
+	if !exists {
+		qualified_service := "koinos.rpc." + qualified_service
+		filed, exists = services[qualified_service]
+
+		if !exists {
+			return nil, ErrInvalidService
+		}
+	}
+
+	// Find and create request message
+	desc := filed.Messages().ByName(protoreflect.Name(service + "_request"))
+	if desc != nil {
+		return nil, ErrInvalidService
+	}
+	req := dynamicpb.NewMessage(desc)
+
+	// Find the method MessageDescriptor
+	desc = filed.Messages().ByName(protoreflect.Name(method + "_request"))
+	if desc != nil {
+		return nil, ErrUnknownMethod
+	}
+
+	// Construct proper requst object ('get_pending_transactions' -> 'get_pending_transactions_request')
+	// Parse request to Message
+	msg := dynamicpb.NewMessage(desc)
+	err := protojson.Unmarshal(j.Params, msg)
+	if err != nil {
+		return nil, ErrInvalidParams
+	}
+
+	fieldd := req.Descriptor().Fields().ByName(protoreflect.Name(method))
+	if fieldd != nil {
+		return nil, ErrUnknownMethod
+	}
+	req.Set(fieldd, protoreflect.ValueOf(msg))
+
+	// Serialize to bytes and return
+	return proto.Marshal(req)
+}
+
+func parseRequest(request []byte) (*RPCRequest, error) {
+	var rpcRequest RPCRequest
+	err := json.Unmarshal(request, &rpcRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &genericRequest, nil
+	return &rpcRequest, nil
 }
 
-func validateRequest(request *GenericRequest) error {
+func validateRequest(request *RPCRequest) error {
 	// Check ID first, an invalid ID must return a Null ID in the response!
 
 	// The client MUST provide an ID with a request
@@ -172,10 +221,37 @@ func validateRequest(request *GenericRequest) error {
 	return nil
 }
 
-func translateResponse(w *KoinosRPCResponse) RPCResponse {
+func translateResponse(responseBytes []byte, service string, qualified_service string, method string, services map[string]protoreflect.FileDescriptor) RPCResponse {
 	var response = RPCResponse{}
 
-	isError, err := isErrorResponse(w)
+	// Get expected response type from qualified service
+	filed, exists := services[qualified_service]
+	if !exists {
+		qualified_service := "koinos.rpc." + qualified_service
+		filed, exists = services[qualified_service]
+
+		if !exists {
+			response.Error = RPCError{
+				Code:    JSONRPCInternalError,
+				Message: fmt.Sprintf("%v", ErrInvalidService.Error()),
+			}
+			return response
+		}
+	}
+
+	// Find and create response message
+	desc := filed.Messages().ByName(protoreflect.Name(service + "_response"))
+	if desc != nil {
+		response.Error = RPCError{
+			Code:    JSONRPCInternalError,
+			Message: fmt.Sprintf("%v", ErrInvalidService.Error()),
+		}
+		return response
+	}
+	resp := dynamicpb.NewMessage(desc)
+
+	// Parse response
+	err := protojson.Unmarshal(responseBytes, resp)
 	if err != nil {
 		response.Error = RPCError{
 			Code:    JSONRPCInternalError,
@@ -184,10 +260,38 @@ func translateResponse(w *KoinosRPCResponse) RPCResponse {
 		return response
 	}
 
-	if isError {
-		var rpcError KoinosRPCError
-		err := json.Unmarshal(w.Value, &rpcError)
+	// If error response
+	fieldd := resp.Descriptor().Fields().ByName(protoreflect.Name("error"))
+	if resp.Has(fieldd) {
+		rpcErr := resp.Get(fieldd).Message()
+		errBytes, err := protojson.Marshal(rpcErr.Interface())
+		if err != nil {
+			response.Error = RPCError{
+				Code:    JSONRPCInternalError,
+				Message: fmt.Sprintf("%v", err),
+			}
+			return response
+		}
 
+		var rpcError RPCError
+		err = json.Unmarshal(errBytes, &rpcError)
+		if err != nil {
+			response.Error = RPCError{
+				Code:    JSONRPCInternalError,
+				Message: fmt.Sprintf("%v", err),
+			}
+			return response
+		}
+
+		rpcError.Code = JSONRPCInternalError
+		response.Error = rpcError
+		return response
+	}
+
+	// If not error
+	fieldd = resp.Descriptor().Fields().ByName(protoreflect.Name(method + "_response"))
+	if !resp.Has(fieldd) {
+		respJSON, err := protojson.Marshal(resp.Interface())
 		if err != nil {
 			response.Error = RPCError{
 				Code:    JSONRPCInternalError,
@@ -198,133 +302,104 @@ func translateResponse(w *KoinosRPCResponse) RPCResponse {
 
 		response.Error = RPCError{
 			Code:    JSONRPCInternalError,
-			Message: rpcError.ErrorText,
-			Data:    rpcError.ErrorData,
+			Message: "Unexpected response",
+			Data:    respJSON,
 		}
-	} else {
-		response.Result = w.Value
+		return response
 	}
+
+	rpcResp := resp.Get(fieldd).Message()
+	respJSON, err := protojson.Marshal(rpcResp.Interface())
+
+	if err != nil {
+		response.Error = RPCError{
+			Code:    JSONRPCInternalError,
+			Message: fmt.Sprintf("%v", err),
+		}
+		return response
+	}
+
+	response.Result = respJSON
 
 	return response
 }
 
-func isErrorResponse(j *KoinosRPCResponse) (bool, error) {
-	typeBytes, err := json.Marshal(j.Type)
-	if err != nil {
-		return false, err
+func NewJSONRPCHandler(client *koinosmq.Client) *JSONRPCHandler {
+	handler := &JSONRPCHandler{
+		mqClient:           client,
+		serviceDescriptors: make(map[string]protoreflect.FileDescriptor),
 	}
-	return strings.Contains(string(typeBytes), "error_response"), nil
+
+	return handler
 }
 
-// HandleJSONRPCRequest handles JSON RPC requests
+func (h *JSONRPCHandler) RegisterService(fd protoreflect.FileDescriptor) {
+	h.serviceDescriptors[string(fd.Package())] = fd
+	log.Infof("Registered descriptor package: %s", string(fd.Package()))
+}
+
+func makeErrorResponse(id json.RawMessage, code int, message string, data string) ([]byte, bool) {
+	jsonError, e := json.Marshal(RPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error: &RPCError{
+			Code:    code,
+			Message: message,
+			Data:    data,
+		},
+	})
+	if e != nil {
+		log.Warnf("An unexpected error has occurred: %v", e.Error())
+		return make([]byte, 0), false
+	}
+	return jsonError, true
+}
+
+// HandleRequest
 // Any error that occurs will be returned in an error response instead of propagating to the caller
 // If ok = false is retured, it means the client cannot recover from this error and the caller should close the connection
-func HandleJSONRPCRequest(reqBytes []byte, client *koinosmq.Client) ([]byte, bool) {
-	genericRequest, err := parseRequest(reqBytes)
+func (h *JSONRPCHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
+	request, err := parseRequest(reqBytes)
 	if err != nil {
-		jsonError, e := json.Marshal(RPCResponse{
-			JSONRPC: "2.0",
-			// If there was an error in detecting the id in the Request object (e.g. Parse error/Invalid Request), it MUST be Null.
-			ID: nil,
-			Error: &RPCError{
-				Code:    JSONRPCParseError,
-				Message: "Unable to parse request",
-				Data:    err.Error(),
-			},
-		})
-		if e != nil {
-			log.Warnf("An unexpected error has occurred: %v", e.Error())
-			return make([]byte, 0), false
-		}
-		return jsonError, true
+		return makeErrorResponse(nil, JSONRPCParseError, "Unable to parse request", err.Error())
 	}
 
-	err = validateRequest(genericRequest)
+	err = validateRequest(request)
 	if err != nil {
 		// If there was an error in detecting the id in the Request object (e.g. Parse error/Invalid Request), it MUST be Null.
-		id := genericRequest.ID
+		id := request.ID
 		if errorWithID(err) {
 			id = nil
 		}
-		jsonError, e := json.Marshal(RPCResponse{
-			JSONRPC: "2.0",
-			ID:      id,
-			Error: &RPCError{
-				Code:    JSONRPCInvalidReq,
-				Message: "Invalid request",
-				Data:    err.Error(),
-			},
-		})
-		if e != nil {
-			log.Warnf("An unexpected error has occurred: %v", e.Error())
-			return make([]byte, 0), false
-		}
-		return jsonError, true
+		return makeErrorResponse(id, JSONRPCInvalidReq, "Invalid request", err.Error())
 	}
 
-	request, err := translateRequest(genericRequest)
+	service, qualified_service, method, err := parseMethod(request)
 	if err != nil {
-		jsonError, e := json.Marshal(RPCResponse{
-			JSONRPC: "2.0",
-			ID:      genericRequest.ID,
-			Error: &RPCError{
-				Code:    JSONRPCMethodNotFound,
-				Message: "Unable to translate request",
-				Data:    err.Error(),
-			},
-		})
-		if e != nil {
-			log.Warnf("An unexpected error has occurred: %v", e.Error())
-			return make([]byte, 0), false
-		}
-		return jsonError, true
+		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
 	}
 
-	service := strings.SplitN(genericRequest.Method, MethodSeparator, MethodSections)[0]
+	internalRequest, err := translateRequest(request, service, qualified_service, method, h.serviceDescriptors)
+	if err != nil {
+		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
+	}
+
+	//service := strings.SplitN(genericRequest.Method, MethodSeparator, MethodSections)[0]
 	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeoutSeconds*time.Second)
 	defer cancel()
-	responseBytes, err := client.RPCContext(ctx, "application/json", service, request)
+	responseBytes, err := h.mqClient.RPCContext(ctx, "application/json", service, internalRequest)
 
 	if err != nil {
-		jsonError, e := json.Marshal(RPCResponse{
-			JSONRPC: "2.0",
-			ID:      genericRequest.ID,
-			Error: &RPCError{
-				Code:    JSONRPCInternalError,
-				Message: "An internal server error has occurred",
-				Data:    err.Error(),
-			},
-		})
-		if e != nil {
-			log.Warnf("An unexpected error has occurred: %v", e.Error())
-			return make([]byte, 0), false
-		}
-		return jsonError, true
+		return makeErrorResponse(request.ID, JSONRPCInternalError, "An internal server error has occurred", err.Error())
 	}
 
-	wrappedResponse := KoinosRPCResponse{}
-	err = json.Unmarshal(responseBytes, &wrappedResponse)
-
-	response := translateResponse(&wrappedResponse)
+	response := translateResponse(responseBytes, service, qualified_service, method, h.serviceDescriptors)
 	response.JSONRPC = "2.0"
-	response.ID = genericRequest.ID
+	response.ID = request.ID
 
 	jsonResponse, err := json.Marshal(&response)
 	if err != nil {
-		jsonError, e := json.Marshal(RPCResponse{
-			JSONRPC: "2.0",
-			ID:      genericRequest.ID,
-			Error: &RPCError{
-				Code:    JSONRPCInternalError,
-				Message: "An internal server error has occurred",
-				Data:    err.Error(),
-			},
-		})
-		if e != nil {
-			log.Warnf("An unexpected error has occurred: %v", e.Error())
-			return make([]byte, 0), false
-		}
-		return jsonError, true
+		return makeErrorResponse(request.ID, JSONRPCInternalError, "An internal server error has occurred", err.Error())
 	}
 
 	return jsonResponse, true
