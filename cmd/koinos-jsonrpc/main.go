@@ -96,7 +96,7 @@ func main() {
 		panic("Expected tcp port")
 	}
 
-	jsonrpcHandler := jsonrpc.NewJSONRPCHandler(client)
+	jsonrpcHandler := jsonrpc.NewRequestHandler(client)
 
 	if !filepath.IsAbs(*descriptorsDir) {
 		*descriptorsDir = path.Join(util.GetAppDir(*baseDir, appName), *descriptorsDir)

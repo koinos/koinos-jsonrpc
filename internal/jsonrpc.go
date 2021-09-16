@@ -40,7 +40,8 @@ type RPCResponse struct {
 	ID      interface{}     `json:"id"`
 }
 
-type JSONRPCHandler struct {
+// RequestHandler handles jsonrpc requests
+type RequestHandler struct {
 	mqClient           *koinosmq.Client
 	serviceDescriptors map[string]protoreflect.FileDescriptor
 }
@@ -126,23 +127,23 @@ func parseMethod(j *RPCRequest) (string, string, string, error) {
 		return "", "", "", ErrMalformedMethod
 	}
 	service := methodData[len(methodData)-2]
-	qualified_service := strings.Join(methodData[:len(methodData)-1], MethodSeparator)
+	qualifiedService := strings.Join(methodData[:len(methodData)-1], MethodSeparator)
 	method := methodData[len(methodData)-1]
 
 	if len(methodData) == MethodSections {
-		qualified_service = "koinos.rpc." + service
+		qualifiedService = "koinos.rpc." + service
 	}
 
-	return service, qualified_service, method, nil
+	return service, qualifiedService, method, nil
 }
 
-func translateRequest(j *RPCRequest, service string, qualified_service string, method string, services map[string]protoreflect.FileDescriptor) ([]byte, error) {
+func translateRequest(j *RPCRequest, service string, qualifiedService string, method string, services map[string]protoreflect.FileDescriptor) ([]byte, error) {
 	// Attempt to find service name as a FileDescripor
 	// If I cannot find it, prefix with 'koinos.rpc.' and attempt again
 	// (koinos.rpc.mempool and mempool will both be valid serives names)
 	filed, exists := services[service]
 	if !exists {
-		filed, exists = services[qualified_service]
+		filed, exists = services[qualifiedService]
 
 		if !exists {
 			return nil, ErrInvalidService
@@ -224,13 +225,13 @@ func validateRequest(request *RPCRequest) error {
 	return nil
 }
 
-func translateResponse(responseBytes []byte, service string, qualified_service string, method string, services map[string]protoreflect.FileDescriptor) RPCResponse {
+func translateResponse(responseBytes []byte, service string, qualifiedService string, method string, services map[string]protoreflect.FileDescriptor) RPCResponse {
 	var response = RPCResponse{}
 
 	// Get expected response type from qualified service
 	filed, exists := services[service]
 	if !exists {
-		filed, exists = services[qualified_service]
+		filed, exists = services[qualifiedService]
 
 		if !exists {
 			response.Error = RPCError{
@@ -338,8 +339,9 @@ func translateResponse(responseBytes []byte, service string, qualified_service s
 	return response
 }
 
-func NewJSONRPCHandler(client *koinosmq.Client) *JSONRPCHandler {
-	handler := &JSONRPCHandler{
+// NewRequestHandler returns a new RequestHandler
+func NewRequestHandler(client *koinosmq.Client) *RequestHandler {
+	handler := &RequestHandler{
 		mqClient:           client,
 		serviceDescriptors: make(map[string]protoreflect.FileDescriptor),
 	}
@@ -347,7 +349,8 @@ func NewJSONRPCHandler(client *koinosmq.Client) *JSONRPCHandler {
 	return handler
 }
 
-func (h *JSONRPCHandler) RegisterService(fd protoreflect.FileDescriptor) {
+// RegisterService from a FileDescriptor
+func (h *RequestHandler) RegisterService(fd protoreflect.FileDescriptor) {
 	h.serviceDescriptors[string(fd.Package())] = fd
 	log.Infof("Registered descriptor package: %s", string(fd.Package()))
 }
@@ -369,10 +372,10 @@ func makeErrorResponse(id json.RawMessage, code int, message string, data string
 	return jsonError, true
 }
 
-// HandleRequest
+// HandleRequest handles a jsonrpc request, returning the results as a byte string
 // Any error that occurs will be returned in an error response instead of propagating to the caller
 // If ok = false is retured, it means the client cannot recover from this error and the caller should close the connection
-func (h *JSONRPCHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
+func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 	request, err := parseRequest(reqBytes)
 	if err != nil {
 		return makeErrorResponse(nil, JSONRPCParseError, "Unable to parse request", err.Error())
@@ -388,12 +391,12 @@ func (h *JSONRPCHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 		return makeErrorResponse(id, JSONRPCInvalidReq, "Invalid request", err.Error())
 	}
 
-	service, qualified_service, method, err := parseMethod(request)
+	service, qualifiedService, method, err := parseMethod(request)
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
 	}
 
-	internalRequest, err := translateRequest(request, service, qualified_service, method, h.serviceDescriptors)
+	internalRequest, err := translateRequest(request, service, qualifiedService, method, h.serviceDescriptors)
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
 	}
@@ -401,14 +404,14 @@ func (h *JSONRPCHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 	//service := strings.SplitN(genericRequest.Method, MethodSeparator, MethodSections)[0]
 	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeoutSeconds*time.Second)
 	defer cancel()
-	log.Infof(qualified_service)
+	log.Infof(qualifiedService)
 	responseBytes, err := h.mqClient.RPCContext(ctx, "application/octet-stream", service, internalRequest)
 
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCInternalError, "An internal server error has occurred", err.Error())
 	}
 
-	response := translateResponse(responseBytes, service, qualified_service, method, h.serviceDescriptors)
+	response := translateResponse(responseBytes, service, qualifiedService, method, h.serviceDescriptors)
 	response.JSONRPC = "2.0"
 	response.ID = request.ID
 
