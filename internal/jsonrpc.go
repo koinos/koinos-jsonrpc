@@ -34,10 +34,10 @@ type RPCError struct {
 
 // RPCResponse represents a JSON RPC response
 type RPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   interface{} `json:"error,omitempty"`
-	ID      interface{} `json:"id"`
+	JSONRPC string          `json:"jsonrpc"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   interface{}     `json:"error,omitempty"`
+	ID      interface{}     `json:"id"`
 }
 
 type JSONRPCHandler struct {
@@ -129,6 +129,10 @@ func parseMethod(j *RPCRequest) (string, string, string, error) {
 	qualified_service := strings.Join(methodData[:len(methodData)-1], MethodSeparator)
 	method := methodData[len(methodData)-1]
 
+	if len(methodData) == MethodSections {
+		qualified_service = "koinos.rpc." + service
+	}
+
 	return service, qualified_service, method, nil
 }
 
@@ -136,9 +140,8 @@ func translateRequest(j *RPCRequest, service string, qualified_service string, m
 	// Attempt to find service name as a FileDescripor
 	// If I cannot find it, prefix with 'koinos.rpc.' and attempt again
 	// (koinos.rpc.mempool and mempool will both be valid serives names)
-	filed, exists := services[qualified_service]
+	filed, exists := services[service]
 	if !exists {
-		qualified_service := "koinos.rpc." + qualified_service
 		filed, exists = services[qualified_service]
 
 		if !exists {
@@ -148,14 +151,14 @@ func translateRequest(j *RPCRequest, service string, qualified_service string, m
 
 	// Find and create request message
 	desc := filed.Messages().ByName(protoreflect.Name(service + "_request"))
-	if desc != nil {
+	if desc == nil {
 		return nil, ErrInvalidService
 	}
 	req := dynamicpb.NewMessage(desc)
 
 	// Find the method MessageDescriptor
 	desc = filed.Messages().ByName(protoreflect.Name(method + "_request"))
-	if desc != nil {
+	if desc == nil {
 		return nil, ErrUnknownMethod
 	}
 
@@ -168,7 +171,7 @@ func translateRequest(j *RPCRequest, service string, qualified_service string, m
 	}
 
 	fieldd := req.Descriptor().Fields().ByName(protoreflect.Name(method))
-	if fieldd != nil {
+	if fieldd == nil {
 		return nil, ErrUnknownMethod
 	}
 	req.Set(fieldd, protoreflect.ValueOf(msg))
@@ -225,9 +228,8 @@ func translateResponse(responseBytes []byte, service string, qualified_service s
 	var response = RPCResponse{}
 
 	// Get expected response type from qualified service
-	filed, exists := services[qualified_service]
+	filed, exists := services[service]
 	if !exists {
-		qualified_service := "koinos.rpc." + qualified_service
 		filed, exists = services[qualified_service]
 
 		if !exists {
@@ -241,7 +243,7 @@ func translateResponse(responseBytes []byte, service string, qualified_service s
 
 	// Find and create response message
 	desc := filed.Messages().ByName(protoreflect.Name(service + "_response"))
-	if desc != nil {
+	if desc == nil {
 		response.Error = RPCError{
 			Code:    JSONRPCInternalError,
 			Message: fmt.Sprintf("%v", ErrInvalidService.Error()),
@@ -251,7 +253,7 @@ func translateResponse(responseBytes []byte, service string, qualified_service s
 	resp := dynamicpb.NewMessage(desc)
 
 	// Parse response
-	err := protojson.Unmarshal(responseBytes, resp)
+	err := proto.Unmarshal(responseBytes, resp)
 	if err != nil {
 		response.Error = RPCError{
 			Code:    JSONRPCInternalError,
@@ -289,7 +291,15 @@ func translateResponse(responseBytes []byte, service string, qualified_service s
 	}
 
 	// If not error
-	fieldd = resp.Descriptor().Fields().ByName(protoreflect.Name(method + "_response"))
+	fieldd = resp.Descriptor().Fields().ByName(protoreflect.Name(method))
+	if fieldd == nil {
+		response.Error = RPCError{
+			Code:    JSONRPCInternalError,
+			Message: fmt.Sprintf("%v", ErrInvalidService.Error()),
+		}
+		return response
+	}
+
 	if !resp.Has(fieldd) {
 		respJSON, err := protojson.Marshal(resp.Interface())
 		if err != nil {
@@ -309,7 +319,11 @@ func translateResponse(responseBytes []byte, service string, qualified_service s
 	}
 
 	rpcResp := resp.Get(fieldd).Message()
-	respJSON, err := protojson.Marshal(rpcResp.Interface())
+	jsonWriter := protojson.MarshalOptions{
+		UseProtoNames:   true,
+		EmitUnpopulated: true,
+	}
+	respJSON, err := jsonWriter.Marshal(rpcResp.Interface())
 
 	if err != nil {
 		response.Error = RPCError{
@@ -387,7 +401,8 @@ func (h *JSONRPCHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 	//service := strings.SplitN(genericRequest.Method, MethodSeparator, MethodSections)[0]
 	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeoutSeconds*time.Second)
 	defer cancel()
-	responseBytes, err := h.mqClient.RPCContext(ctx, "application/json", service, internalRequest)
+	log.Infof(qualified_service)
+	responseBytes, err := h.mqClient.RPCContext(ctx, "application/octet-stream", service, internalRequest)
 
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCInternalError, "An internal server error has occurred", err.Error())
