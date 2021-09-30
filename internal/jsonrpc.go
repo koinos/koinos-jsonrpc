@@ -401,7 +401,6 @@ func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
 	}
 
-	//service := strings.SplitN(genericRequest.Method, MethodSeparator, MethodSections)[0]
 	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeoutSeconds*time.Second)
 	defer cancel()
 	log.Infof(qualifiedService)
