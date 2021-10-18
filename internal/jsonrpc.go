@@ -10,7 +10,8 @@ import (
 
 	log "github.com/koinos/koinos-log-golang"
 	koinosmq "github.com/koinos/koinos-mq-golang"
-	"google.golang.org/protobuf/encoding/protojson"
+	koinosjson "github.com/koinos/koinos-proto-golang/koinos/json"
+
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -166,7 +167,7 @@ func translateRequest(j *RPCRequest, service string, qualifiedService string, me
 	// Construct proper requst object ('get_pending_transactions' -> 'get_pending_transactions_request')
 	// Parse request to Message
 	msg := dynamicpb.NewMessage(desc)
-	err := protojson.Unmarshal(j.Params, msg)
+	err := koinosjson.Unmarshal(j.Params, msg)
 	if err != nil {
 		return nil, ErrInvalidParams
 	}
@@ -267,7 +268,7 @@ func translateResponse(responseBytes []byte, service string, qualifiedService st
 	fieldd := resp.Descriptor().Fields().ByName(protoreflect.Name("error"))
 	if resp.Has(fieldd) {
 		rpcErr := resp.Get(fieldd).Message()
-		errBytes, err := protojson.Marshal(rpcErr.Interface())
+		errBytes, err := koinosjson.Marshal(rpcErr.Interface())
 		if err != nil {
 			response.Error = RPCError{
 				Code:    JSONRPCInternalError,
@@ -302,7 +303,7 @@ func translateResponse(responseBytes []byte, service string, qualifiedService st
 	}
 
 	if !resp.Has(fieldd) {
-		respJSON, err := protojson.Marshal(resp.Interface())
+		respJSON, err := koinosjson.Marshal(resp.Interface())
 		if err != nil {
 			response.Error = RPCError{
 				Code:    JSONRPCInternalError,
@@ -320,11 +321,7 @@ func translateResponse(responseBytes []byte, service string, qualifiedService st
 	}
 
 	rpcResp := resp.Get(fieldd).Message()
-	jsonWriter := protojson.MarshalOptions{
-		UseProtoNames:   true,
-		EmitUnpopulated: true,
-	}
-	respJSON, err := jsonWriter.Marshal(rpcResp.Interface())
+	respJSON, err := koinosjson.Marshal(rpcResp.Interface())
 
 	if err != nil {
 		response.Error = RPCError{
