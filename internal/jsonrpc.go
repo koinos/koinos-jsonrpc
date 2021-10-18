@@ -105,6 +105,9 @@ const (
 	// MethodSections defines the number of sections in the JSON RPC method
 	MethodSections = 2
 
+	// MaxMethodNamespaces defines the maximum allowed number of qualified namespaces
+	MaxMethodNamespaces = 3
+
 	// RPCTimeoutSeconds defines how long to wait for a Koinos RPC response
 	RPCTimeoutSeconds = 5
 )
@@ -122,7 +125,7 @@ func errorWithID(e error) bool {
 }
 
 func parseMethod(j *RPCRequest) (string, string, string, error) {
-	methodData := strings.SplitN(j.Method, MethodSeparator, MethodSections)
+	methodData := strings.SplitN(j.Method, MethodSeparator, MaxMethodNamespaces+1)
 	if len(methodData) < MethodSections {
 		return "", "", "", ErrMalformedMethod
 	}
@@ -376,6 +379,7 @@ func makeErrorResponse(id json.RawMessage, code int, message string, data string
 // Any error that occurs will be returned in an error response instead of propagating to the caller
 // If ok = false is retured, it means the client cannot recover from this error and the caller should close the connection
 func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
+	log.Debugf("Got request: '%s'", string(reqBytes))
 	request, err := parseRequest(reqBytes)
 	if err != nil {
 		return makeErrorResponse(nil, JSONRPCParseError, "Unable to parse request", err.Error())
@@ -417,6 +421,8 @@ func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCInternalError, "An internal server error has occurred", err.Error())
 	}
+
+	log.Debugf("Sending response: %s", string(jsonResponse))
 
 	return jsonResponse, true
 }
