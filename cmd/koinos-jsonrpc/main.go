@@ -148,7 +148,7 @@ func main() {
 
 	protoFiles, err := protoFileOpts.NewFiles(fileDescriptorSet)
 	if err != nil {
-		log.Errorf("Could not convert file descriptr set: %s", err.Error())
+		log.Errorf("Could not convert file descriptor set: %s", err.Error())
 		os.Exit(1)
 	}
 
