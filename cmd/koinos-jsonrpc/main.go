@@ -19,7 +19,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -112,7 +111,12 @@ func main() {
 	}
 
 	var protoFileOpts protodesc.FileOptions
-	var protoFiles protoregistry.Files
+	//var protoFiles protoregistry.Files
+	fileDescriptorSet := &descriptorpb.FileDescriptorSet{}
+
+	// Add FieldOptions to protoregistry
+	fieldProto := descriptorpb.FieldOptions{}
+	fileDescriptorSet.File = append(fileDescriptorSet.File, protodesc.ToFileDescriptorProto(fieldProto.ProtoReflect().Descriptor().ParentFile()))
 
 	for _, f := range files {
 		// If it is a file
@@ -126,34 +130,32 @@ func main() {
 			var fds descriptorpb.FileDescriptorSet
 			err = proto.Unmarshal(fileBytes, &fds)
 			if err != nil {
-				var fdProto descriptorpb.FileDescriptorProto
-				err2 := proto.Unmarshal(fileBytes, &fdProto)
+				fdProto := &descriptorpb.FileDescriptorProto{}
+				err2 := proto.Unmarshal(fileBytes, fdProto)
 				if err2 != nil {
 					log.Errorf("Could not parse file %s: (%s, %s)", f.Name(), err.Error(), err2.Error())
 					continue
 				}
 
-				fd, err := protoFileOpts.New(&fdProto, &protoFiles)
-				if err != nil {
-					log.Errorf("Could not convert file descriptor for %s: %s", f.Name(), err.Error())
-					continue
-				}
-
-				jsonrpcHandler.RegisterService(fd)
+				fileDescriptorSet.File = append(fileDescriptorSet.File, fdProto)
 			} else {
-				files, err := protoFileOpts.NewFiles(&fds)
-				if err != nil {
-					log.Errorf("Could not convert file descriptor set for %s: %s", f.Name(), err.Error())
-					continue
+				for _, fdProto := range fds.GetFile() {
+					fileDescriptorSet.File = append(fileDescriptorSet.File, fdProto)
 				}
-
-				files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-					jsonrpcHandler.RegisterService(fd)
-					return true
-				})
 			}
 		}
 	}
+
+	protoFiles, err := protoFileOpts.NewFiles(fileDescriptorSet)
+	if err != nil {
+		log.Errorf("Could not convert file descriptor set: %s", err.Error())
+		os.Exit(1)
+	}
+
+	protoFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		jsonrpcHandler.RegisterService(fd)
+		return true
+	})
 
 	httpHandler := func(w http.ResponseWriter, req *http.Request) {
 		body, err := ioutil.ReadAll(req.Body)
