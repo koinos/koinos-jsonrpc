@@ -13,6 +13,8 @@ import (
 	jsonrpc "github.com/koinos/koinos-jsonrpc/internal"
 	log "github.com/koinos/koinos-log-golang"
 	koinosmq "github.com/koinos/koinos-mq-golang"
+	"github.com/koinos/koinos-proto-golang/koinos"
+	"github.com/koinos/koinos-proto-golang/koinos/protocol"
 	util "github.com/koinos/koinos-util-golang"
 	ma "github.com/multiformats/go-multiaddr"
 	flag "github.com/spf13/pflag"
@@ -110,13 +112,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	var protoFileOpts protodesc.FileOptions
-	//var protoFiles protoregistry.Files
-	fileDescriptorSet := &descriptorpb.FileDescriptorSet{}
+	fileMap := make(map[string]*descriptorpb.FileDescriptorProto)
+	//fileDescriptorSet.File = append(fileDescriptorSet.File, protodesc.ToFileDescriptorProto()
 
 	// Add FieldOptions to protoregistry
-	fieldProto := descriptorpb.FieldOptions{}
-	fileDescriptorSet.File = append(fileDescriptorSet.File, protodesc.ToFileDescriptorProto(fieldProto.ProtoReflect().Descriptor().ParentFile()))
+	fieldProtoFile := protodesc.ToFileDescriptorProto((&descriptorpb.FieldOptions{}).ProtoReflect().Descriptor().ParentFile())
+	fileMap[*fieldProtoFile.Name] = fieldProtoFile
+
+	optionsFile := protodesc.ToFileDescriptorProto((koinos.BytesType(0)).Descriptor().ParentFile())
+	fileMap[*optionsFile.Name] = optionsFile
+
+	commonFile := protodesc.ToFileDescriptorProto((&koinos.BlockTopology{}).ProtoReflect().Descriptor().ParentFile())
+	fileMap[*commonFile.Name] = commonFile
+
+	protocolFile := protodesc.ToFileDescriptorProto((&protocol.Block{}).ProtoReflect().Descriptor().ParentFile())
+	fileMap[*protocolFile.Name] = protocolFile
+
+	chainFile := protodesc.ToFileDescriptorProto((&koinos.BlockTopology{}).ProtoReflect().Descriptor().ParentFile())
+	fileMap[*chainFile.Name] = chainFile
 
 	for _, f := range files {
 		// If it is a file
@@ -137,13 +150,20 @@ func main() {
 					continue
 				}
 
-				fileDescriptorSet.File = append(fileDescriptorSet.File, fdProto)
+				fileMap[*fdProto.Name] = fdProto
 			} else {
 				for _, fdProto := range fds.GetFile() {
-					fileDescriptorSet.File = append(fileDescriptorSet.File, fdProto)
+					fileMap[*fdProto.Name] = fdProto
 				}
 			}
 		}
+	}
+
+	var protoFileOpts protodesc.FileOptions
+	fileDescriptorSet := &descriptorpb.FileDescriptorSet{}
+
+	for _, v := range fileMap {
+		fileDescriptorSet.File = append(fileDescriptorSet.File, v)
 	}
 
 	protoFiles, err := protoFileOpts.NewFiles(fileDescriptorSet)
