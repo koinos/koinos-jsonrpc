@@ -113,7 +113,6 @@ func main() {
 	}
 
 	fileMap := make(map[string]*descriptorpb.FileDescriptorProto)
-	//fileDescriptorSet.File = append(fileDescriptorSet.File, protodesc.ToFileDescriptorProto()
 
 	// Add FieldOptions to protoregistry
 	fieldProtoFile := protodesc.ToFileDescriptorProto((&descriptorpb.FieldOptions{}).ProtoReflect().Descriptor().ParentFile())
