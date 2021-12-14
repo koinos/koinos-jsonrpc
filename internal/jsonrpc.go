@@ -10,7 +10,7 @@ import (
 
 	log "github.com/koinos/koinos-log-golang"
 	koinosmq "github.com/koinos/koinos-mq-golang"
-	koinosjson "github.com/koinos/koinos-proto-golang/koinos/json"
+	koinosjson "github.com/koinos/koinos-proto-golang/encoding/json"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
