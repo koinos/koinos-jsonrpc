@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -117,6 +118,9 @@ func main() {
 	// Add FieldOptions to protoregistry
 	fieldProtoFile := protodesc.ToFileDescriptorProto((&descriptorpb.FieldOptions{}).ProtoReflect().Descriptor().ParentFile())
 	fileMap[*fieldProtoFile.Name] = fieldProtoFile
+
+	anyProtoFile := protodesc.ToFileDescriptorProto((&anypb.Any{}).ProtoReflect().Descriptor().ParentFile())
+	fileMap[*anyProtoFile.Name] = anyProtoFile
 
 	optionsFile := protodesc.ToFileDescriptorProto((koinos.BytesType(0)).Descriptor().ParentFile())
 	fileMap[*optionsFile.Name] = optionsFile
