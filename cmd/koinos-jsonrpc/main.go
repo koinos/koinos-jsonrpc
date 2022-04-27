@@ -194,13 +194,28 @@ func main() {
 			return
 		}
 
+		_, err = w.Write(response)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
-		w.Write(response)
+
 		log.Debug(string(response))
 	}
 
 	http.HandleFunc(*endpoint, httpHandler)
-	go http.ListenAndServe(ipAddr+":"+tcpPort, nil)
+
+	errs := make(chan error, 1)
+	go func() {
+		errs <- http.ListenAndServe(ipAddr+":"+tcpPort, nil)
+	}()
+
+	if err := <-errs; err != nil {
+		log.Error(err.Error())
+	}
+
 	log.Infof("Listening on %v:%v%v", ipAddr, tcpPort, *endpoint)
 
 	// Wait for a SIGINT or SIGTERM signal
