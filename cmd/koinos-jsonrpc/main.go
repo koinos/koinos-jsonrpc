@@ -212,11 +212,11 @@ func main() {
 		errs <- http.ListenAndServe(ipAddr+":"+tcpPort, nil)
 	}()
 
+	log.Infof("Listening on %v:%v%v", ipAddr, tcpPort, *endpoint)
+
 	if err := <-errs; err != nil {
 		log.Error(err.Error())
 	}
-
-	log.Infof("Listening on %v:%v%v", ipAddr, tcpPort, *endpoint)
 
 	// Wait for a SIGINT or SIGTERM signal
 	ch := make(chan os.Signal, 1)
