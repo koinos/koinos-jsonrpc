@@ -200,8 +200,6 @@ func main() {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-
 		log.Debug(string(response))
 	}
 
