@@ -404,7 +404,7 @@ func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeoutSeconds*time.Second)
 	defer cancel()
-	responseBytes, err := h.mqClient.RPCContext(ctx, "application/octet-stream", service, internalRequest)
+	responseBytes, err := h.mqClient.RPC(ctx, "application/octet-stream", service, internalRequest)
 
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCInternalError, "An internal server error has occurred", err.Error())

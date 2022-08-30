@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -80,8 +81,11 @@ func main() {
 		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warn, error", *logLevel))
 	}
 
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
 	client := koinosmq.NewClient(*amqp, koinosmq.NoRetry)
-	client.Start()
+	client.Start(ctx)
 
 	m, err := ma.NewMultiaddr(*listen)
 	if err != nil {
