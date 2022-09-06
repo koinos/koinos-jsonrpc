@@ -112,7 +112,11 @@ func main() {
 		*descriptorsDir = path.Join(util.GetAppDir(baseDir, appName), *descriptorsDir)
 	}
 
-	util.EnsureDir(*descriptorsDir)
+	err = util.EnsureDir(*descriptorsDir)
+	if err != nil {
+		log.Errorf("Could not read directory %s: %s", *descriptorsDir, err.Error())
+		os.Exit(1)
+	}
 
 	// For each file in descriptorsDir, try to parse as a FileDescriptor or FileDescriptorSet
 	files, err := ioutil.ReadDir(*descriptorsDir)
