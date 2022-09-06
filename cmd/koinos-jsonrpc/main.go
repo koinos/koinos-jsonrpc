@@ -51,7 +51,7 @@ const (
 )
 
 func main() {
-	baseDir := flag.StringP(basedirOption, "d", basedirDefault, "the base directory")
+	baseDirPtr := flag.StringP(basedirOption, "d", basedirDefault, "the base directory")
 	amqp := flag.StringP(amqpOption, "a", "", "AMQP server URL")
 	listen := flag.StringP(listenOption, "l", "", "Multiaddr to listen on")
 	endpoint := flag.StringP(endpointOption, "e", "", "Http listen endpoint")
@@ -61,9 +61,13 @@ func main() {
 
 	flag.Parse()
 
-	*baseDir = util.InitBaseDir(*baseDir)
-	util.EnsureDir(*baseDir)
-	yamlConfig := util.InitYamlConfig(*baseDir)
+	baseDir, err := util.InitBaseDir(*baseDirPtr)
+	if err != nil {
+		fmt.Printf("Could not initialize base directory '%v'\n", *baseDirPtr)
+		os.Exit(1)
+	}
+
+	yamlConfig := util.InitYamlConfig(baseDir)
 
 	*amqp = util.GetStringOption(amqpOption, amqpDefault, *amqp, yamlConfig.JSONRPC, yamlConfig.Global)
 	*listen = util.GetStringOption(listenOption, listenDefault, *listen, yamlConfig.JSONRPC)
@@ -75,8 +79,8 @@ func main() {
 	appID := fmt.Sprintf("%s.%s", appName, *instanceID)
 
 	// Initialize logger
-	logFilename := path.Join(util.GetAppDir(*baseDir, appName), logDir, "jsonrpc.log")
-	err := log.InitLogger(*logLevel, false, logFilename, appID)
+	logFilename := path.Join(util.GetAppDir(baseDir, appName), logDir, "jsonrpc.log")
+	err = log.InitLogger(*logLevel, false, logFilename, appID)
 	if err != nil {
 		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warn, error", *logLevel))
 	}
@@ -105,7 +109,7 @@ func main() {
 	jsonrpcHandler := jsonrpc.NewRequestHandler(client)
 
 	if !filepath.IsAbs(*descriptorsDir) {
-		*descriptorsDir = path.Join(util.GetAppDir(*baseDir, appName), *descriptorsDir)
+		*descriptorsDir = path.Join(util.GetAppDir(baseDir, appName), *descriptorsDir)
 	}
 
 	util.EnsureDir(*descriptorsDir)
