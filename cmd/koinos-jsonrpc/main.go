@@ -34,6 +34,7 @@ const (
 	logLevelOption       = "log-level"
 	instanceIDOption     = "instance-id"
 	descriptorsDirOption = "descriptors"
+	jobsOption           = "jobs"
 )
 
 const (
@@ -43,12 +44,18 @@ const (
 	endpointDefault       = "/"
 	logLevelDefault       = "info"
 	descriptorsDirDefault = "descriptors"
+	jobsDefault           = 16
 )
 
 const (
 	appName = "jsonrpc"
 	logDir  = "logs"
 )
+
+type Job struct {
+	request  []byte
+	response chan []byte
+}
 
 func main() {
 	baseDirPtr := flag.StringP(basedirOption, "d", basedirDefault, "the base directory")
@@ -58,6 +65,7 @@ func main() {
 	logLevel := flag.StringP(logLevelOption, "v", "", "The log filtering level (debug, info, warn, error)")
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
 	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
+	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
 
 	flag.Parse()
 
@@ -192,6 +200,26 @@ func main() {
 		return true
 	})
 
+	jobChan := make(chan Job)
+
+	for i := uint(0); i < *jobs; i++ {
+		go func() {
+			for {
+				job, ok := <-jobChan
+				if !ok {
+					break
+				}
+
+				resp, ok := jsonrpcHandler.HandleRequest(job.request)
+				if !ok {
+					close(job.response)
+				} else {
+					job.response <- resp
+				}
+			}
+		}()
+	}
+
 	httpHandler := func(w http.ResponseWriter, req *http.Request) {
 		body, err := ioutil.ReadAll(req.Body)
 		if err != nil {
@@ -200,7 +228,11 @@ func main() {
 		}
 
 		log.Debug(string(body))
-		response, ok := jsonrpcHandler.HandleRequest(body)
+		respChan := make(chan []byte, 1)
+		job := Job{request: body, response: respChan}
+		jobChan <- job
+
+		response, ok := <-respChan
 		if !ok {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -232,5 +264,6 @@ func main() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
+	close(jobChan)
 	log.Info("Shutting down node...")
 }
