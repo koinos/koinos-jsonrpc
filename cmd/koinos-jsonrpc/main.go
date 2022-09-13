@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	jsonrpc "github.com/koinos/koinos-jsonrpc/internal"
 	log "github.com/koinos/koinos-log-golang"
@@ -48,8 +49,9 @@ const (
 )
 
 const (
-	appName = "jsonrpc"
-	logDir  = "logs"
+	appName        = "jsonrpc"
+	logDir         = "logs"
+	gatewayTimeout = 5 * time.Second
 )
 
 type Job struct {
@@ -200,7 +202,7 @@ func main() {
 		return true
 	})
 
-	jobChan := make(chan Job)
+	jobChan := make(chan Job, *jobs*2)
 
 	for i := uint(0); i < *jobs; i++ {
 		go func() {
@@ -230,7 +232,13 @@ func main() {
 		log.Debug(string(body))
 		respChan := make(chan []byte, 1)
 		job := Job{request: body, response: respChan}
-		jobChan <- job
+
+		select {
+		case jobChan <- job:
+		case <-time.After(gatewayTimeout):
+			w.WriteHeader(http.StatusGatewayTimeout)
+			return
+		}
 
 		response, ok := <-respChan
 		if !ok {
