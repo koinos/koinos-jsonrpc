@@ -170,9 +170,11 @@ func translateRequest(j *RPCRequest, service string, qualifiedService string, me
 	// Construct proper requst object ('get_pending_transactions' -> 'get_pending_transactions_request')
 	// Parse request to Message
 	msg := dynamicpb.NewMessage(desc)
-	err := koinosjson.Unmarshal(j.Params, msg)
-	if err != nil {
-		return nil, ErrInvalidParams
+	if len(j.Params) > 0 {
+		err := koinosjson.Unmarshal(j.Params, msg)
+		if err != nil {
+			return nil, ErrInvalidParams
+		}
 	}
 
 	fieldd := req.Descriptor().Fields().ByName(protoreflect.Name(method))
