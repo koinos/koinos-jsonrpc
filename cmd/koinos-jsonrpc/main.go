@@ -36,6 +36,8 @@ const (
 	instanceIDOption     = "instance-id"
 	descriptorsDirOption = "descriptors"
 	jobsOption           = "jobs"
+	gatewayTimeoutOption = "gateway-timeout"
+	mqTimeoutOption      = "mq-timeout"
 )
 
 const (
@@ -46,12 +48,13 @@ const (
 	logLevelDefault       = "info"
 	descriptorsDirDefault = "descriptors"
 	jobsDefault           = 16
+	gatewayTimeoutDefault = 3
+	mqTimeoutDefault      = 5
 )
 
 const (
-	appName        = "jsonrpc"
-	logDir         = "logs"
-	gatewayTimeout = 5 * time.Second
+	appName = "jsonrpc"
+	logDir  = "logs"
 )
 
 type Job struct {
@@ -68,6 +71,8 @@ func main() {
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
 	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
 	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
+	gatewayTimeout := flag.UintP(gatewayTimeoutOption, "g", gatewayTimeoutDefault, "The timeout to enqueue a request")
+	mqTimeout := flag.UintP(mqTimeoutOption, "m", mqTimeoutDefault, "The timeout for MQ requests")
 
 	flag.Parse()
 
@@ -116,7 +121,7 @@ func main() {
 		panic("Expected tcp port")
 	}
 
-	jsonrpcHandler := jsonrpc.NewRequestHandler(client)
+	jsonrpcHandler := jsonrpc.NewRequestHandler(client, *mqTimeout)
 
 	if !filepath.IsAbs(*descriptorsDir) {
 		*descriptorsDir = path.Join(util.GetAppDir(baseDir, appName), *descriptorsDir)
@@ -207,16 +212,16 @@ func main() {
 	for i := uint(0); i < *jobs; i++ {
 		go func() {
 			for {
-				job, ok := <-jobChan
-				if !ok {
-					break
-				}
-
-				resp, ok := jsonrpcHandler.HandleRequest(job.request)
-				if !ok {
-					close(job.response)
-				} else {
-					job.response <- resp
+				select {
+				case job := <-jobChan:
+					resp, ok := jsonrpcHandler.HandleRequest(job.request)
+					if !ok {
+						close(job.response)
+					} else {
+						job.response <- resp
+					}
+				case <-ctx.Done():
+					return
 				}
 			}
 		}()
@@ -235,7 +240,10 @@ func main() {
 
 		select {
 		case jobChan <- job:
-		case <-time.After(gatewayTimeout):
+		case <-ctx.Done():
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		case <-time.After(time.Duration(*gatewayTimeout) * time.Second):
 			w.WriteHeader(http.StatusGatewayTimeout)
 			return
 		}
@@ -272,6 +280,5 @@ func main() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
-	close(jobChan)
 	log.Info("Shutting down node...")
 }
