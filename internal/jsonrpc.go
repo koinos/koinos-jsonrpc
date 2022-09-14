@@ -45,6 +45,7 @@ type RPCResponse struct {
 type RequestHandler struct {
 	mqClient           *koinosmq.Client
 	serviceDescriptors map[string]protoreflect.FileDescriptor
+	timeout            time.Duration
 }
 
 const (
@@ -69,34 +70,34 @@ const (
 
 var (
 	// ErrMalformedMethod indicates the method was not properly formed
-	ErrMalformedMethod = errors.New("Methods should be in the format service_name.method_name")
+	ErrMalformedMethod = errors.New("methods should be in the format service_name.method_name")
 
 	// ErrInvalidService indicates the correct ServiceName was not supplied
-	ErrInvalidService = errors.New("Invalid service name provided")
+	ErrInvalidService = errors.New("invalid service name provided")
 
 	// ErrUnknownMethod indicates the method is not known
-	ErrUnknownMethod = errors.New("Unknown method")
+	ErrUnknownMethod = errors.New("unknown method")
 
 	// ErrInvalidParams indicates the parameters could not be parsed
-	ErrInvalidParams = errors.New("Parameters could not be parsed")
+	ErrInvalidParams = errors.New("parameters could not be parsed")
 
 	// ErrInvalidJSONRPCVersion indicates an improper JSON RPC version was specified
-	ErrInvalidJSONRPCVersion = errors.New("Invalid or missing JSON RPC version was specified")
+	ErrInvalidJSONRPCVersion = errors.New("invalid or missing JSON RPC version was specified")
 
 	// ErrInvalidJSONRPCID indicates an invalid JSON RPC ID was provided
-	ErrInvalidJSONRPCID = errors.New("Invalid ID was specified")
+	ErrInvalidJSONRPCID = errors.New("invalid ID was specified")
 
 	// ErrMissingJSONRPCID indicates the ID does not exist
-	ErrMissingJSONRPCID = errors.New("Missing ID")
+	ErrMissingJSONRPCID = errors.New("missing ID")
 
 	// ErrFractionalJSONRPCID indicates a fractional number was identified as the ID
 	ErrFractionalJSONRPCID = errors.New("ID must not contain fractional parts")
 
 	// ErrUnsupportedJSONRPCIDType indicates an ID type that is unsupported
-	ErrUnsupportedJSONRPCIDType = errors.New("An ID must be a Number (non-fractional), String, or Null")
+	ErrUnsupportedJSONRPCIDType = errors.New("an ID must be a Number (non-fractional), String, or Null")
 
 	// ErrUnexpectedResponse indicates a malformed RPC response
-	ErrUnexpectedResponse = errors.New("Unexpected RPC response from microservice")
+	ErrUnexpectedResponse = errors.New("unexpected RPC response from microservice")
 )
 
 const (
@@ -108,9 +109,6 @@ const (
 
 	// MaxMethodNamespaces defines the maximum allowed number of qualified namespaces
 	MaxMethodNamespaces = 3
-
-	// RPCTimeoutSeconds defines how long to wait for a Koinos RPC response
-	RPCTimeoutSeconds = 5
 )
 
 func errorWithID(e error) bool {
@@ -342,10 +340,11 @@ func translateResponse(responseBytes []byte, service string, qualifiedService st
 }
 
 // NewRequestHandler returns a new RequestHandler
-func NewRequestHandler(client *koinosmq.Client) *RequestHandler {
+func NewRequestHandler(client *koinosmq.Client, timeout uint) *RequestHandler {
 	handler := &RequestHandler{
 		mqClient:           client,
 		serviceDescriptors: make(map[string]protoreflect.FileDescriptor),
+		timeout:            time.Duration(timeout) * time.Second,
 	}
 
 	return handler
@@ -404,7 +403,7 @@ func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeoutSeconds*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
 	defer cancel()
 	responseBytes, err := h.mqClient.RPC(ctx, "application/octet-stream", service, internalRequest)
 

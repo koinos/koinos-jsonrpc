@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	jsonrpc "github.com/koinos/koinos-jsonrpc/internal"
 	log "github.com/koinos/koinos-log-golang"
@@ -34,6 +35,9 @@ const (
 	logLevelOption       = "log-level"
 	instanceIDOption     = "instance-id"
 	descriptorsDirOption = "descriptors"
+	jobsOption           = "jobs"
+	gatewayTimeoutOption = "gateway-timeout"
+	mqTimeoutOption      = "mq-timeout"
 )
 
 const (
@@ -43,12 +47,20 @@ const (
 	endpointDefault       = "/"
 	logLevelDefault       = "info"
 	descriptorsDirDefault = "descriptors"
+	jobsDefault           = 16
+	gatewayTimeoutDefault = 3
+	mqTimeoutDefault      = 5
 )
 
 const (
 	appName = "jsonrpc"
 	logDir  = "logs"
 )
+
+type Job struct {
+	request  []byte
+	response chan []byte
+}
 
 func main() {
 	baseDirPtr := flag.StringP(basedirOption, "d", basedirDefault, "the base directory")
@@ -58,6 +70,9 @@ func main() {
 	logLevel := flag.StringP(logLevelOption, "v", "", "The log filtering level (debug, info, warn, error)")
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
 	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
+	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
+	gatewayTimeout := flag.UintP(gatewayTimeoutOption, "g", gatewayTimeoutDefault, "The timeout to enqueue a request")
+	mqTimeout := flag.UintP(mqTimeoutOption, "m", mqTimeoutDefault, "The timeout for MQ requests")
 
 	flag.Parse()
 
@@ -106,7 +121,7 @@ func main() {
 		panic("Expected tcp port")
 	}
 
-	jsonrpcHandler := jsonrpc.NewRequestHandler(client)
+	jsonrpcHandler := jsonrpc.NewRequestHandler(client, *mqTimeout)
 
 	if !filepath.IsAbs(*descriptorsDir) {
 		*descriptorsDir = path.Join(util.GetAppDir(baseDir, appName), *descriptorsDir)
@@ -192,6 +207,26 @@ func main() {
 		return true
 	})
 
+	jobChan := make(chan Job, *jobs*2)
+
+	for i := uint(0); i < *jobs; i++ {
+		go func() {
+			for {
+				select {
+				case job := <-jobChan:
+					resp, ok := jsonrpcHandler.HandleRequest(job.request)
+					if !ok {
+						close(job.response)
+					} else {
+						job.response <- resp
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
 	httpHandler := func(w http.ResponseWriter, req *http.Request) {
 		body, err := ioutil.ReadAll(req.Body)
 		if err != nil {
@@ -200,7 +235,20 @@ func main() {
 		}
 
 		log.Debug(string(body))
-		response, ok := jsonrpcHandler.HandleRequest(body)
+		respChan := make(chan []byte, 1)
+		job := Job{request: body, response: respChan}
+
+		select {
+		case jobChan <- job:
+		case <-ctx.Done():
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		case <-time.After(time.Duration(*gatewayTimeout) * time.Second):
+			w.WriteHeader(http.StatusGatewayTimeout)
+			return
+		}
+
+		response, ok := <-respChan
 		if !ok {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
