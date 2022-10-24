@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/koinos/koinos-log-golang v0.0.0-20210621202301-3310a8e5866b
-	github.com/koinos/koinos-mq-golang v0.0.0-20220923190404-3c5aa9b8945a
+	github.com/koinos/koinos-mq-golang v0.0.0-20221024212636-7a87fbfd4702
 	github.com/koinos/koinos-proto-golang v0.3.1-0.20220708180354-16481ac5469c
 	github.com/koinos/koinos-util-golang v0.0.0-20220831225923-5ba6e0d4e7b9
 	github.com/multiformats/go-multiaddr v0.3.1
