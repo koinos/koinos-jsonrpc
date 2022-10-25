@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -227,6 +228,8 @@ func main() {
 		}()
 	}
 
+	var recentRequests uint32
+
 	httpHandler := func(w http.ResponseWriter, req *http.Request) {
 		body, err := ioutil.ReadAll(req.Body)
 		if err != nil {
@@ -260,6 +263,8 @@ func main() {
 			return
 		}
 
+		atomic.AddUint32(&recentRequests, 1)
+
 		log.Debug(string(response))
 	}
 
@@ -271,6 +276,21 @@ func main() {
 	}()
 
 	log.Infof("Listening on %v:%v%v", ipAddr, tcpPort, *endpoint)
+
+	go func() {
+		for {
+			select {
+			case <-time.After(60 * time.Second):
+				numRequests := atomic.SwapUint32(&recentRequests, 0)
+
+				if numRequests > 0 {
+					log.Infof("Recently handled %v request(s)", numRequests)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	if err := <-errs; err != nil {
 		log.Error(err.Error())
