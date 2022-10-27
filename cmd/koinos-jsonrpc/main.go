@@ -72,8 +72,8 @@ func main() {
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
 	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
 	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
-	gatewayTimeout := flag.UintP(gatewayTimeoutOption, "g", gatewayTimeoutDefault, "The timeout to enqueue a request")
-	mqTimeout := flag.UintP(mqTimeoutOption, "m", mqTimeoutDefault, "The timeout for MQ requests")
+	gatewayTimeout := flag.IntP(gatewayTimeoutOption, "g", gatewayTimeoutDefault, "The timeout to enqueue a request")
+	mqTimeout := flag.IntP(mqTimeoutOption, "m", mqTimeoutDefault, "The timeout for MQ requests")
 
 	flag.Parse()
 
@@ -91,6 +91,8 @@ func main() {
 	*logLevel = util.GetStringOption(logLevelOption, logLevelDefault, *logLevel, yamlConfig.JSONRPC, yamlConfig.Global)
 	*instanceID = util.GetStringOption(instanceIDOption, util.GenerateBase58ID(5), *instanceID, yamlConfig.JSONRPC, yamlConfig.Global)
 	*descriptorsDir = util.GetStringOption(descriptorsDirOption, descriptorsDirDefault, *descriptorsDir, yamlConfig.JSONRPC, yamlConfig.Global)
+	*gatewayTimeout = util.GetIntOption(gatewayTimeoutOption, gatewayTimeoutDefault, *gatewayTimeout, yamlConfig.JSONRPC, yamlConfig.Global)
+	*mqTimeout = util.GetIntOption(mqTimeoutOption, mqTimeoutDefault, *mqTimeout, yamlConfig.JSONRPC, yamlConfig.Global)
 
 	appID := fmt.Sprintf("%s.%s", appName, *instanceID)
 
@@ -122,7 +124,7 @@ func main() {
 		panic("Expected tcp port")
 	}
 
-	jsonrpcHandler := jsonrpc.NewRequestHandler(client, *mqTimeout)
+	jsonrpcHandler := jsonrpc.NewRequestHandler(client, uint(*mqTimeout))
 
 	if !filepath.IsAbs(*descriptorsDir) {
 		*descriptorsDir = path.Join(util.GetAppDir(baseDir, appName), *descriptorsDir)
