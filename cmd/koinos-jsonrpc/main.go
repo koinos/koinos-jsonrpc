@@ -261,7 +261,7 @@ func main() {
 
 		_, err = w.Write(response)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			log.Warnf("An error occurred while writing HTTP response: %v", err.Error())
 			return
 		}
 
