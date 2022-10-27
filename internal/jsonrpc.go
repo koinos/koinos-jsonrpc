@@ -109,6 +109,9 @@ const (
 
 	// MaxMethodNamespaces defines the maximum allowed number of qualified namespaces
 	MaxMethodNamespaces = 3
+
+	// MaxMessageSize defines the maximum amount of bytes an AMQP message can be
+	MaxMessageSize = 536870912
 )
 
 func errorWithID(e error) bool {
@@ -401,6 +404,10 @@ func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 	internalRequest, err := translateRequest(request, service, qualifiedService, method, h.serviceDescriptors)
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
+	}
+
+	if len(internalRequest) > MaxMessageSize {
+		return makeErrorResponse(request.ID, JSONRPCInvalidParams, "Request exceeds maximum message size", ErrInvalidParams.Error())
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
