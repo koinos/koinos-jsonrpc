@@ -66,7 +66,7 @@ type Job struct {
 
 // Version display values
 const (
-	DisplayAppName = "Koinos JSON RPC"
+	DisplayAppName = "Koinos JSONRPC"
 	Version        = "v1.0.0"
 )
 
