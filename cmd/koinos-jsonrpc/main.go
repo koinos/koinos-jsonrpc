@@ -39,6 +39,7 @@ const (
 	jobsOption           = "jobs"
 	gatewayTimeoutOption = "gateway-timeout"
 	mqTimeoutOption      = "mq-timeout"
+	versionOption        = "version"
 )
 
 const (
@@ -63,17 +64,27 @@ type Job struct {
 	response chan []byte
 }
 
+// Version display values
+const (
+	DisplayAppName = "Koinos JSONRPC"
+	Version        = "v1.0.0"
+)
+
+// Gets filled in by the linker
+var Commit string
+
 func main() {
 	baseDirPtr := flag.StringP(basedirOption, "d", basedirDefault, "the base directory")
 	amqp := flag.StringP(amqpOption, "a", "", "AMQP server URL")
-	listen := flag.StringP(listenOption, "l", "", "Multiaddr to listen on")
+	listen := flag.StringP(listenOption, "L", "", "Multiaddr to listen on")
 	endpoint := flag.StringP(endpointOption, "e", "", "Http listen endpoint")
-	logLevel := flag.StringP(logLevelOption, "v", "", "The log filtering level (debug, info, warn, error)")
+	logLevel := flag.StringP(logLevelOption, "l", "", "The log filtering level (debug, info, warn, error)")
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
 	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
 	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
 	gatewayTimeout := flag.IntP(gatewayTimeoutOption, "g", gatewayTimeoutDefault, "The timeout to enqueue a request")
 	mqTimeout := flag.IntP(mqTimeoutOption, "m", mqTimeoutDefault, "The timeout for MQ requests")
+	version := flag.BoolP(versionOption, "v", false, "Print version and exit")
 
 	flag.Parse()
 
@@ -81,6 +92,11 @@ func main() {
 	if err != nil {
 		fmt.Printf("Could not initialize base directory '%v'\n", *baseDirPtr)
 		os.Exit(1)
+	}
+
+	if *version {
+		fmt.Println(makeVersionString())
+		os.Exit(0)
 	}
 
 	yamlConfig := util.InitYamlConfig(baseDir)
@@ -102,6 +118,8 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warn, error", *logLevel))
 	}
+
+	log.Info(makeVersionString())
 
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	defer ctxCancel()
@@ -303,4 +321,13 @@ func main() {
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
 	log.Info("Shutting down node...")
+}
+
+func makeVersionString() string {
+	commitString := ""
+	if len(Commit) >= 8 {
+		commitString = fmt.Sprintf("(%s)", Commit[0:8])
+	}
+
+	return fmt.Sprintf("%s %s %s", DisplayAppName, Version, commitString)
 }
