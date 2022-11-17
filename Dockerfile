@@ -8,7 +8,8 @@ RUN apk update && \
     apk add \
         gcc \
         musl-dev \
-        linux-headers
+        linux-headers \
+        git
 
 RUN go get ./... && \
     go build -ldflags="-X main.Commit=$(git rev-parse HEAD)" -o koinos_jsonrpc cmd/koinos-jsonrpc/main.go
