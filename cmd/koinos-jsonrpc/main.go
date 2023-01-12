@@ -39,6 +39,8 @@ const (
 	jobsOption           = "jobs"
 	gatewayTimeoutOption = "gateway-timeout"
 	mqTimeoutOption      = "mq-timeout"
+	whitelistOption      = "whitelist"
+	blacklistOption      = "blacklist"
 	versionOption        = "version"
 )
 
@@ -84,6 +86,8 @@ func main() {
 	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
 	gatewayTimeout := flag.IntP(gatewayTimeoutOption, "g", gatewayTimeoutDefault, "The timeout to enqueue a request")
 	mqTimeout := flag.IntP(mqTimeoutOption, "m", mqTimeoutDefault, "The timeout for MQ requests")
+	whitelist := flag.StringSliceP(whitelistOption, "w", []string{}, "RPC targets to whitelist")
+	blacklist := flag.StringSliceP(blacklistOption, "b", []string{}, "RPC targets to blacklist")
 	version := flag.BoolP(versionOption, "v", false, "Print version and exit")
 
 	flag.Parse()
@@ -109,6 +113,8 @@ func main() {
 	*descriptorsDir = util.GetStringOption(descriptorsDirOption, descriptorsDirDefault, *descriptorsDir, yamlConfig.JSONRPC, yamlConfig.Global)
 	*gatewayTimeout = util.GetIntOption(gatewayTimeoutOption, gatewayTimeoutDefault, *gatewayTimeout, yamlConfig.JSONRPC, yamlConfig.Global)
 	*mqTimeout = util.GetIntOption(mqTimeoutOption, mqTimeoutDefault, *mqTimeout, yamlConfig.JSONRPC, yamlConfig.Global)
+	*whitelist = util.GetStringSliceOption(whitelistOption, *whitelist, yamlConfig.JSONRPC, yamlConfig.Global)
+	*blacklist = util.GetStringSliceOption(blacklistOption, *blacklist, yamlConfig.JSONRPC, yamlConfig.Global)
 
 	appID := fmt.Sprintf("%s.%s", appName, *instanceID)
 
@@ -142,7 +148,15 @@ func main() {
 		panic("Expected tcp port")
 	}
 
-	jsonrpcHandler := jsonrpc.NewRequestHandler(client, uint(*mqTimeout))
+	if len(*whitelist) > 0 {
+		log.Infof("Whitelist: %s", *whitelist)
+	}
+
+	if len(*blacklist) > 0 {
+		log.Infof("Blacklist: %s", *blacklist)
+	}
+
+	jsonrpcHandler := jsonrpc.NewRequestHandler(client, uint(*mqTimeout), *whitelist, *blacklist)
 
 	if !filepath.IsAbs(*descriptorsDir) {
 		*descriptorsDir = path.Join(util.GetAppDir(baseDir, appName), *descriptorsDir)
