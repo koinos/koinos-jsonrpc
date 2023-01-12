@@ -46,6 +46,8 @@ type RequestHandler struct {
 	mqClient           *koinosmq.Client
 	serviceDescriptors map[string]protoreflect.FileDescriptor
 	timeout            time.Duration
+	whitelist          []string
+	blacklist          []string
 }
 
 const (
@@ -98,6 +100,12 @@ var (
 
 	// ErrUnexpectedResponse indicates a malformed RPC response
 	ErrUnexpectedResponse = errors.New("unexpected RPC response from microservice")
+
+	// ErrMethodNotWhitelisted indicates the requested method is not on the whitelist
+	ErrMethodNotWhitelisted = errors.New("method not whitelisted")
+
+	// ErrMethodBlacklisted indicates the requested method is on the blacklist
+	ErrMethodBlacklisted = errors.New("method blacklisted")
 )
 
 const (
@@ -112,6 +120,9 @@ const (
 
 	// MaxMessageSize defines the maximum amount of bytes an AMQP message can be
 	MaxMessageSize = 536870912
+
+	// QualifiedNamePrefix is the prefix of all fully qualified rpc methods
+	QualifiedNamePrefix = "koinos.rpc."
 )
 
 func errorWithID(e error) bool {
@@ -136,13 +147,13 @@ func parseMethod(j *RPCRequest) (string, string, string, error) {
 	method := methodData[len(methodData)-1]
 
 	if len(methodData) == MethodSections {
-		qualifiedService = "koinos.rpc." + service
+		qualifiedService = QualifiedNamePrefix + service
 	}
 
 	return service, qualifiedService, method, nil
 }
 
-func translateRequest(j *RPCRequest, service string, qualifiedService string, method string, services map[string]protoreflect.FileDescriptor) ([]byte, error) {
+func (h *RequestHandler) translateRequest(j *RPCRequest, service string, qualifiedService string, method string, services map[string]protoreflect.FileDescriptor) ([]byte, error) {
 	// Attempt to find service name as a FileDescripor
 	// If I cannot find it, prefix with 'koinos.rpc.' and attempt again
 	// (koinos.rpc.mempool and mempool will both be valid serives names)
@@ -166,6 +177,29 @@ func translateRequest(j *RPCRequest, service string, qualifiedService string, me
 	desc = filed.Messages().ByName(protoreflect.Name(method + "_request"))
 	if desc == nil {
 		return nil, ErrUnknownMethod
+	}
+
+	qualifiedMethod := qualifiedService + MethodSeparator + method
+
+	if len(h.whitelist) > 0 {
+		inWhitelist := false
+
+		for _, rule := range h.whitelist {
+			if strings.HasPrefix(qualifiedMethod, rule) {
+				inWhitelist = true
+				break
+			}
+		}
+
+		if !inWhitelist {
+			return nil, ErrMethodNotWhitelisted
+		}
+	}
+
+	for _, rule := range h.blacklist {
+		if strings.HasPrefix(qualifiedMethod, rule) {
+			return nil, ErrMethodBlacklisted
+		}
 	}
 
 	// Construct proper requst object ('get_pending_transactions' -> 'get_pending_transactions_request')
@@ -343,11 +377,25 @@ func translateResponse(responseBytes []byte, service string, qualifiedService st
 }
 
 // NewRequestHandler returns a new RequestHandler
-func NewRequestHandler(client *koinosmq.Client, timeout uint) *RequestHandler {
+func NewRequestHandler(client *koinosmq.Client, timeout uint, whitelist []string, blacklist []string) *RequestHandler {
+	for i := range whitelist {
+		if !strings.HasPrefix(whitelist[i], QualifiedNamePrefix) {
+			whitelist[i] = QualifiedNamePrefix + whitelist[i]
+		}
+	}
+
+	for i := range blacklist {
+		if !strings.HasPrefix(blacklist[i], QualifiedNamePrefix) {
+			blacklist[i] = QualifiedNamePrefix + blacklist[i]
+		}
+	}
+
 	handler := &RequestHandler{
 		mqClient:           client,
 		serviceDescriptors: make(map[string]protoreflect.FileDescriptor),
 		timeout:            time.Duration(timeout) * time.Second,
+		whitelist:          whitelist,
+		blacklist:          blacklist,
 	}
 
 	return handler
@@ -401,7 +449,7 @@ func (h *RequestHandler) HandleRequest(reqBytes []byte) ([]byte, bool) {
 		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
 	}
 
-	internalRequest, err := translateRequest(request, service, qualifiedService, method, h.serviceDescriptors)
+	internalRequest, err := h.translateRequest(request, service, qualifiedService, method, h.serviceDescriptors)
 	if err != nil {
 		return makeErrorResponse(request.ID, JSONRPCMethodNotFound, "Unable to translate request", err.Error())
 	}
