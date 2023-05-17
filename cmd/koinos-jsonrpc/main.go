@@ -291,6 +291,7 @@ func main() {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		_, err = w.Write(response)
 		if err != nil {
 			log.Warnf("An error occurred while writing HTTP response: %v", err.Error())
