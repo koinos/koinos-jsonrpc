@@ -71,7 +71,7 @@ type Job struct {
 // Version display values
 const (
 	DisplayAppName = "Koinos JSONRPC"
-	Version        = "v1.0.0"
+	Version        = "v1.1.0"
 )
 
 // Gets filled in by the linker
@@ -82,7 +82,7 @@ func main() {
 	amqp := flag.StringP(amqpOption, "a", "", "AMQP server URL")
 	listen := flag.StringP(listenOption, "L", "", "Multiaddr to listen on")
 	endpoint := flag.StringP(endpointOption, "e", "", "Http listen endpoint")
-	logLevel := flag.StringP(logLevelOption, "l", "", "The log filtering level (debug, info, warn, error)")
+	logLevel := flag.StringP(logLevelOption, "l", "", "The log filtering level (debug, info, warning, error)")
 	logDir := flag.String(logDirOption, "", "The logging directory")
 	logColor := flag.Bool(logColorOption, logColorDefault, "Log color toggle")
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
@@ -128,7 +128,7 @@ func main() {
 
 	err = log.InitLogger(appName, *instanceID, *logLevel, *logDir, *logColor)
 	if err != nil {
-		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warn, error", *logLevel))
+		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warning, error", *logLevel))
 	}
 
 	log.Info(makeVersionString())
