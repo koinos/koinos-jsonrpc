@@ -36,6 +36,7 @@ const (
 	logLevelOption       = "log-level"
 	logDirOption         = "log-dir"
 	logColorOption       = "log-color"
+	logDatetimeOption    = "log-datetime"
 	instanceIDOption     = "instance-id"
 	descriptorsDirOption = "descriptors"
 	jobsOption           = "jobs"
@@ -52,7 +53,8 @@ const (
 	listenDefault         = "/ip4/127.0.0.1/tcp/8080"
 	endpointDefault       = "/"
 	logLevelDefault       = "info"
-	logColorDefault       = false
+	logColorDefault       = true
+	logDatetimeDefault    = true
 	descriptorsDirDefault = "descriptors"
 	jobsDefault           = 16
 	gatewayTimeoutDefault = 3
@@ -85,6 +87,7 @@ func main() {
 	logLevel := flag.StringP(logLevelOption, "l", "", "The log filtering level (debug, info, warning, error)")
 	logDir := flag.String(logDirOption, "", "The logging directory")
 	logColor := flag.Bool(logColorOption, logColorDefault, "Log color toggle")
+	logDatetime := flag.Bool(logDatetimeOption, logDatetimeDefault, "Log datetime on console toggle")
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
 	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
 	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
@@ -115,6 +118,7 @@ func main() {
 	*logLevel = util.GetStringOption(logLevelOption, logLevelDefault, *logLevel, yamlConfig.JSONRPC, yamlConfig.Global)
 	*logDir = util.GetStringOption(logDirOption, *logDir, *logDir, yamlConfig.JSONRPC, yamlConfig.Global)
 	*logColor = util.GetBoolOption(logColorOption, logColorDefault, *logColor, yamlConfig.JSONRPC, yamlConfig.Global)
+	*logDatetime = util.GetBoolOption(logDatetimeOption, logDatetimeDefault, *logDatetime, yamlConfig.JSONRPC, yamlConfig.Global)
 	*instanceID = util.GetStringOption(instanceIDOption, util.GenerateBase58ID(5), *instanceID, yamlConfig.JSONRPC, yamlConfig.Global)
 	*descriptorsDir = util.GetStringOption(descriptorsDirOption, descriptorsDirDefault, *descriptorsDir, yamlConfig.JSONRPC, yamlConfig.Global)
 	*gatewayTimeout = util.GetIntOption(gatewayTimeoutOption, gatewayTimeoutDefault, *gatewayTimeout, yamlConfig.JSONRPC, yamlConfig.Global)
@@ -126,7 +130,7 @@ func main() {
 		*logDir = path.Join(util.GetAppDir(baseDir, appName), *logDir)
 	}
 
-	err = log.InitLogger(appName, *instanceID, *logLevel, *logDir, *logColor)
+	err = log.InitLogger(appName, *instanceID, *logLevel, *logDir, *logColor, *logDatetime)
 	if err != nil {
 		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warning, error", *logLevel))
 	}
