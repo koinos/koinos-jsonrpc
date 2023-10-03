@@ -14,7 +14,7 @@ import (
 	"time"
 
 	jsonrpc "github.com/koinos/koinos-jsonrpc/internal"
-	log "github.com/koinos/koinos-log-golang"
+	log "github.com/koinos/koinos-log-golang/v2"
 	koinosmq "github.com/koinos/koinos-mq-golang"
 	"github.com/koinos/koinos-proto-golang/koinos"
 	"github.com/koinos/koinos-proto-golang/koinos/protocol"
@@ -34,6 +34,9 @@ const (
 	listenOption         = "listen"
 	endpointOption       = "endpoint"
 	logLevelOption       = "log-level"
+	logDirOption         = "log-dir"
+	logColorOption       = "log-color"
+	logDatetimeOption    = "log-datetime"
 	instanceIDOption     = "instance-id"
 	descriptorsDirOption = "descriptors"
 	jobsOption           = "jobs"
@@ -50,6 +53,8 @@ const (
 	listenDefault         = "/ip4/127.0.0.1/tcp/8080"
 	endpointDefault       = "/"
 	logLevelDefault       = "info"
+	logColorDefault       = true
+	logDatetimeDefault    = true
 	descriptorsDirDefault = "descriptors"
 	jobsDefault           = 16
 	gatewayTimeoutDefault = 3
@@ -58,7 +63,6 @@ const (
 
 const (
 	appName = "jsonrpc"
-	logDir  = "logs"
 )
 
 type Job struct {
@@ -69,7 +73,7 @@ type Job struct {
 // Version display values
 const (
 	DisplayAppName = "Koinos JSONRPC"
-	Version        = "v1.0.0"
+	Version        = "v1.1.0"
 )
 
 // Gets filled in by the linker
@@ -80,7 +84,10 @@ func main() {
 	amqp := flag.StringP(amqpOption, "a", "", "AMQP server URL")
 	listen := flag.StringP(listenOption, "L", "", "Multiaddr to listen on")
 	endpoint := flag.StringP(endpointOption, "e", "", "Http listen endpoint")
-	logLevel := flag.StringP(logLevelOption, "l", "", "The log filtering level (debug, info, warn, error)")
+	logLevel := flag.StringP(logLevelOption, "l", "", "The log filtering level (debug, info, warning, error)")
+	logDir := flag.String(logDirOption, "", "The logging directory")
+	logColor := flag.Bool(logColorOption, logColorDefault, "Log color toggle")
+	logDatetime := flag.Bool(logDatetimeOption, logDatetimeDefault, "Log datetime on console toggle")
 	instanceID := flag.StringP(instanceIDOption, "i", "", "The instance ID to identify this node")
 	descriptorsDir := flag.StringP(descriptorsDirOption, "D", "", "The directory containing protobuf descriptors for rpc message types")
 	jobs := flag.UintP(jobsOption, "j", jobsDefault, "Number of jobs")
@@ -109,6 +116,9 @@ func main() {
 	*listen = util.GetStringOption(listenOption, listenDefault, *listen, yamlConfig.JSONRPC)
 	*endpoint = util.GetStringOption(endpointOption, endpointDefault, *endpoint, yamlConfig.JSONRPC)
 	*logLevel = util.GetStringOption(logLevelOption, logLevelDefault, *logLevel, yamlConfig.JSONRPC, yamlConfig.Global)
+	*logDir = util.GetStringOption(logDirOption, *logDir, *logDir, yamlConfig.JSONRPC, yamlConfig.Global)
+	*logColor = util.GetBoolOption(logColorOption, logColorDefault, *logColor, yamlConfig.JSONRPC, yamlConfig.Global)
+	*logDatetime = util.GetBoolOption(logDatetimeOption, logDatetimeDefault, *logDatetime, yamlConfig.JSONRPC, yamlConfig.Global)
 	*instanceID = util.GetStringOption(instanceIDOption, util.GenerateBase58ID(5), *instanceID, yamlConfig.JSONRPC, yamlConfig.Global)
 	*descriptorsDir = util.GetStringOption(descriptorsDirOption, descriptorsDirDefault, *descriptorsDir, yamlConfig.JSONRPC, yamlConfig.Global)
 	*gatewayTimeout = util.GetIntOption(gatewayTimeoutOption, gatewayTimeoutDefault, *gatewayTimeout, yamlConfig.JSONRPC, yamlConfig.Global)
@@ -116,13 +126,13 @@ func main() {
 	*whitelist = util.GetStringSliceOption(whitelistOption, *whitelist, yamlConfig.JSONRPC, yamlConfig.Global)
 	*blacklist = util.GetStringSliceOption(blacklistOption, *blacklist, yamlConfig.JSONRPC, yamlConfig.Global)
 
-	appID := fmt.Sprintf("%s.%s", appName, *instanceID)
+	if len(*logDir) > 0 && !path.IsAbs(*logDir) {
+		*logDir = path.Join(util.GetAppDir(baseDir, appName), *logDir)
+	}
 
-	// Initialize logger
-	logFilename := path.Join(util.GetAppDir(baseDir, appName), logDir, "jsonrpc.log")
-	err = log.InitLogger(*logLevel, false, logFilename, appID)
+	err = log.InitLogger(appName, *instanceID, *logLevel, *logDir, *logColor, *logDatetime)
 	if err != nil {
-		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warn, error", *logLevel))
+		panic(fmt.Sprintf("Invalid log-level: %s. Please choose one of: debug, info, warning, error", *logLevel))
 	}
 
 	log.Info(makeVersionString())
