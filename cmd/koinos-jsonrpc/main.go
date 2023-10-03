@@ -14,7 +14,7 @@ import (
 	"time"
 
 	jsonrpc "github.com/koinos/koinos-jsonrpc/internal"
-	log "github.com/koinos/koinos-log-golang"
+	log "github.com/koinos/koinos-log-golang/v2"
 	koinosmq "github.com/koinos/koinos-mq-golang"
 	"github.com/koinos/koinos-proto-golang/koinos"
 	"github.com/koinos/koinos-proto-golang/koinos/protocol"

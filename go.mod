@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/koinos/koinos-log-golang v1.0.1-0.20231002210928-929b5ecd5bc8
+	github.com/koinos/koinos-log-golang/v2 v2.0.0 // indirect
 	github.com/koinos/koinos-mq-golang v1.0.0
 	github.com/koinos/koinos-proto-golang v1.0.0
 	github.com/koinos/koinos-util-golang v1.0.0
