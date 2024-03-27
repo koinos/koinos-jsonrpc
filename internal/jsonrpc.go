@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/koinos/koinos-log-golang"
+	log "github.com/koinos/koinos-log-golang/v2"
 	koinosmq "github.com/koinos/koinos-mq-golang"
-	koinosjson "github.com/koinos/koinos-proto-golang/encoding/json"
+	koinosjson "github.com/koinos/koinos-proto-golang/v2/encoding/json"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
