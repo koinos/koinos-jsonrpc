@@ -3,9 +3,8 @@ module github.com/koinos/koinos-jsonrpc
 go 1.15
 
 require (
-	github.com/koinos/koinos-log-golang v1.0.1-0.20231002210928-929b5ecd5bc8 // indirect
 	github.com/koinos/koinos-log-golang/v2 v2.0.0
-	github.com/koinos/koinos-mq-golang v1.0.0
+	github.com/koinos/koinos-mq-golang v1.0.1-0.20240408214802-1591cd1fe2eb
 	github.com/koinos/koinos-proto-golang/v2 v2.0.2
 	github.com/koinos/koinos-util-golang/v2 v2.0.1
 	github.com/multiformats/go-multiaddr v0.3.1
