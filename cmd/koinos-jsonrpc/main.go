@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -179,7 +179,7 @@ func main() {
 	}
 
 	// For each file in descriptorsDir, try to parse as a FileDescriptor or FileDescriptorSet
-	files, err := ioutil.ReadDir(*descriptorsDir)
+	files, err := os.ReadDir(*descriptorsDir)
 	if err != nil {
 		log.Errorf("Could not read directory %s: %s", *descriptorsDir, err.Error())
 		os.Exit(1)
@@ -209,7 +209,7 @@ func main() {
 	for _, f := range files {
 		// If it is a file
 		if !f.IsDir() {
-			fileBytes, err := ioutil.ReadFile(path.Join(*descriptorsDir, f.Name()))
+			fileBytes, err := os.ReadFile(path.Join(*descriptorsDir, f.Name()))
 			if err != nil {
 				log.Errorf("Could not read file %s: %s", f.Name(), err.Error())
 				continue
@@ -275,7 +275,7 @@ func main() {
 	var recentRequests uint32
 
 	httpHandler := func(w http.ResponseWriter, req *http.Request) {
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
