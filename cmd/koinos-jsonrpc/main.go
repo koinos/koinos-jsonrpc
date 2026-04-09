@@ -73,7 +73,7 @@ type Job struct {
 // Version display values
 const (
 	DisplayAppName = "Koinos JSONRPC"
-	Version        = "v1.1.0"
+	Version        = "v1.2.0"
 )
 
 // Gets filled in by the linker
@@ -275,6 +275,15 @@ func main() {
 	var recentRequests uint32
 
 	httpHandler := func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if req.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
